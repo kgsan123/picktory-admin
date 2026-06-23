@@ -19,6 +19,23 @@ NETFLIX_TSV = 'https://top10.netflix.com/all-weeks-tv.tsv'
 
 RERUN_KEYWORDS = ['재방', '총집편', '다시보기', '클래식']
 
+# LIVE_RANKING에서 허용하는 방송 채널 목록 (화이트리스트 방식)
+# 이 목록에 없으면 재방/옛날 프로그램 전용 채널로 간주하고 제외
+BROADCAST_CHANNELS = {
+    'MBC', 'MBC every1', 'SBS', 'SBS Plus', 'SBS funE',
+    'KBS1', 'KBS2', 'KBS Joy', 'KBS Drama',
+    'tvN', 'tvN STORY', 'tvN SHOW', 'tvN DRAMA', 'OCN', 'OCN Thrills',
+    'JTBC', 'JTBC2', 'JTBC3',
+    '채널A', '채널A플러스', 'MBN', 'ENA', 'Mnet', 'E채널',
+    'Tving',
+}
+
+# tving_new_episode 제목 기반 노이즈 필터
+TITLE_NOISE_KEYWORDS = ['더빙', '자막판', '애니', '토론', 'NEWS', '뉴스']
+
+_BRACKET_EP = re.compile(r'^\[?\d+(?:회|화)\]')  # [199회], 37회로 시작
+_SINCE_YEAR = re.compile(r'\s+since\s+\d{4}', re.IGNORECASE)  # since 2014 제거
+
 
 def _is_rerun(title: str) -> bool:
     return any(k in title for k in RERUN_KEYWORDS)
@@ -28,13 +45,29 @@ def _has_korean(text: str) -> bool:
     return bool(re.search(r'[가-힣]', text))
 
 
+def _is_valid_broadcast_channel(ch: str) -> bool:
+    """방송 채널 화이트리스트 — 재방/옛날 프로그램 전용 채널 제외."""
+    return ch in BROADCAST_CHANNELS or ch.startswith('tvN') or ch.startswith('JTBC')
+
+
+def _is_title_noise(title: str) -> bool:
+    return any(k in title for k in TITLE_NOISE_KEYWORDS)
+
+
+def _clean_title(title: str) -> str:
+    """'냉장고를 부탁해 since 2014' → '냉장고를 부탁해'"""
+    return _SINCE_YEAR.sub('', title).strip()
+
+
 def _infer_category(title: str) -> str:
     t = title.upper()
+    if any(k in title for k in ['뮤직뱅크', '음악중심', '인기가요', '카운트다운', '쇼챔피언']):
+        return 'music'
     if any(k in title for k in ['연애', '솔로', '커플', '결혼', '하트', '시그널']):
         return 'romance'
     if any(k in t for k in ['SOLO', 'HEART', 'LOVE']):
         return 'romance'
-    if any(k in title for k in ['서바이벌', '경쟁', '피지컬', '배틀', '파이터', '전설']):
+    if any(k in title for k in ['서바이벌', '경쟁', '피지컬', '배틀', '파이터', '전설', '오디션', '아이돌']):
         return 'survival'
     return 'variety'
 
@@ -100,11 +133,29 @@ def scan_netflix_kr() -> list[dict]:
     return list(seen.values())
 
 
+_EP_SUFFIX = re.compile(r'\s*\d+(?:화|회)\s*$')
+_SEASON_IN_TITLE = re.compile(r'\s+시즌\d+$')
+
+
+def _strip_episode(title: str) -> tuple[str, int | None]:
+    """'하트시그널 시즌5 11화' → ('하트시그널 시즌5', 11)"""
+    m = _EP_SUFFIX.search(title)
+    ep = None
+    if m:
+        ep_str = re.search(r'\d+', m.group())
+        ep = int(ep_str.group()) if ep_str else None
+        title = title[:m.start()].strip()
+    return title, ep
+
+
 def scan_tving() -> list[dict]:
     """
-    Tving 랭킹 페이지 VOD 순위에서 현재 인기 한국 콘텐츠 추출.
-    __NEXT_DATA__ JSON에서 VOD_BASIC_RANKING 밴드를 직접 파싱.
-    Returns: [{name, channel, category, clip_count_7d, source}]
+    Tving __NEXT_DATA__ JSON에서 현재 방영중 콘텐츠만 추출.
+
+    3가지 소스 사용:
+    - VOD_BASIC (화제작): isNewEpisode=True 필터 → 구작/카탈로그 제외
+    - VOD_BASIC_RANKING (TOP20): isNewEpisode=True 필터
+    - LIVE_RANKING (실시간 인기 LIVE): 에피소드 번호 + 채널명 포함 → 가장 정확
     """
     try:
         from playwright.sync_api import sync_playwright
@@ -112,7 +163,8 @@ def scan_tving() -> list[dict]:
         log.warning('playwright 미설치 — Tving 스캔 건너뜀')
         return []
 
-    results = []
+    results: dict[str, dict] = {}
+
     try:
         with sync_playwright() as pw:
             browser = pw.chromium.launch(headless=True)
@@ -120,11 +172,9 @@ def scan_tving() -> list[dict]:
             page.goto('https://www.tving.com/ranking/content', timeout=40000)
             page.wait_for_load_state('domcontentloaded', timeout=30000)
             page.wait_for_timeout(3000)
-
             html = page.content()
             browser.close()
 
-        # __NEXT_DATA__ JSON에서 VOD_BASIC_RANKING 추출
         m = re.search(
             r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>',
             html, re.DOTALL
@@ -137,30 +187,71 @@ def scan_tving() -> list[dict]:
         bands = data['props']['pageProps']['boardMainData']['bands']
 
         for band in bands:
-            if band.get('bandType') != 'VOD_BASIC_RANKING':
-                continue
-            for i, item in enumerate(band.get('items', [])[:20], 1):
-                title = item.get('title', '').strip()
-                if not title or not _has_korean(title):
-                    continue
-                if _is_rerun(title):
-                    continue
-                results.append({
-                    'name': title,
-                    'channel': 'Tving',
-                    'category': _infer_category(title),
-                    'clip_count_7d': 21 - i,
-                    'source': 'tving_ranking',
-                    'latest_episode': None,
-                    'season': None,
-                })
-            break  # VOD_BASIC_RANKING 한 개만
+            bt = band.get('bandType', '')
+            items = band.get('items', [])
+
+            # VOD_BASIC (화제작) + VOD_BASIC_RANKING: isNewEpisode=True 인 것만
+            if bt in ('VOD_BASIC', 'VOD_BASIC_RANKING'):
+                for i, item in enumerate(items[:20], 1):
+                    label = item.get('label') or {}
+                    if not label.get('isNewEpisode'):
+                        continue  # 구작 / 카탈로그 제외
+                    title = _clean_title(item.get('title', '').strip())
+                    if not title or not _has_korean(title):
+                        continue
+                    if _is_rerun(title) or _is_title_noise(title):
+                        continue
+                    key = title
+                    if key not in results:
+                        results[key] = {
+                            'name': title,
+                            'channel': 'Tving',
+                            'category': _infer_category(title),
+                            'clip_count_7d': 21 - i,
+                            'source': 'tving_new_episode',
+                            'latest_episode': None,
+                            'season': None,
+                        }
+
+            # LIVE_RANKING: 실시간 인기 — 에피소드 번호 + 채널명 보유
+            elif bt == 'LIVE_RANKING':
+                for i, item in enumerate(items[:20], 1):
+                    raw_title = item.get('title', '').strip()
+                    ch_name = item.get('channelName', '') or 'Tving'
+                    if not raw_title or not _has_korean(raw_title) or _is_rerun(raw_title):
+                        continue
+                    if not _is_valid_broadcast_channel(ch_name):
+                        continue  # 재방/옛날 프로그램 전용 채널 제외
+                    if _BRACKET_EP.match(raw_title):
+                        continue  # [199회]로 시작 = 프로그램명 추출 불가
+                    show_name, ep = _strip_episode(raw_title)
+                    if ep is None:
+                        continue  # 에피소드 번호 없음 = 에피소드 내용 제목일 가능성 높음
+                    show_name = _clean_title(show_name)
+                    if not show_name or len(show_name) < 2 or not _has_korean(show_name):
+                        continue
+                    if _is_title_noise(show_name):
+                        continue
+                    key = show_name
+                    if key not in results:
+                        results[key] = {
+                            'name': show_name,
+                            'channel': ch_name,
+                            'category': _infer_category(show_name),
+                            'clip_count_7d': 21 - i,
+                            'source': 'tving_live',
+                            'latest_episode': ep,
+                            'season': None,
+                        }
+                    elif ep and (results[key]['latest_episode'] or 0) < ep:
+                        results[key]['latest_episode'] = ep
 
     except Exception as e:
         log.warning(f'Tving 스캔 실패: {e}')
 
-    log.info(f'Tving: {len(results)}개 발견')
-    return results
+    out = list(results.values())
+    log.info(f'Tving: {len(out)}개 발견 (현재 방영중 필터 적용)')
+    return out
 
 
 if __name__ == '__main__':

@@ -1,10 +1,38 @@
 [
   {
-    "name": "프로그램 이름",
-    "category": "romance",
-    "channel": "tvN",
-    "air_days": ["Mon", "Tue"],
-    "air_time_kst": "21:20",
-    "current_episode": 1
+    "name": "뮤직뱅크",
+    "category": "music",
+    "channel": "KBS2",
+    "air_days": ["Fri"],
+    "air_time_kst": "17:00",
+    "current_episode": 1,
+    "always_on": true
+  },
+  {
+    "name": "쇼! 음악중심",
+    "category": "music",
+    "channel": "MBC",
+    "air_days": ["Sat"],
+    "air_time_kst": "15:00",
+    "current_episode": 1,
+    "always_on": true
+  },
+  {
+    "name": "인기가요",
+    "category": "music",
+    "channel": "SBS",
+    "air_days": ["Sun"],
+    "air_time_kst": "15:30",
+    "current_episode": 1,
+    "always_on": true
+  },
+  {
+    "name": "M 카운트다운",
+    "category": "music",
+    "channel": "Mnet",
+    "air_days": ["Thu"],
+    "air_time_kst": "18:00",
+    "current_episode": 1,
+    "always_on": true
   }
 ]

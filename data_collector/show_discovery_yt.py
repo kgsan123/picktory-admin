@@ -19,17 +19,28 @@ KST = ZoneInfo('Asia/Seoul')
 # 채널 검색 쿼리 → (방송채널명, 카테고리 힌트)
 # 예능 채널 우선 (서바이벌/연애 예능이 메인 타겟)
 YT_CHANNEL_QUERIES = {
-    'MBC 예능':           ('MBC',   'variety'),
-    'SBS 예능':           ('SBS',   'variety'),
-    'KBS 예능':           ('KBS2',  'variety'),
-    'JTBC Entertainment': ('JTBC',  'variety'),
-    'tvN 드라마':          ('tvN',   'drama'),
-    'Mnet':               ('Mnet',  'survival'),
-    'M2':                 ('Mnet',  'survival'),   # CJ ENM 퍼포먼스 채널 (Mnet 보조 신호)
-    'ENA Channel':        ('ENA',   'variety'),
-    'MBC Drama':          ('MBC',   'drama'),
-    'SBS Drama':          ('SBS',   'drama'),
-    'JTBC Drama':         ('JTBC',  'drama'),
+    # ── 예능 (서바이벌/연애 포함) ──────────────────────────
+    'MBC 예능':               ('MBC',       'variety'),
+    'SBS 예능':               ('SBS',       'variety'),
+    'KBS 예능':               ('KBS2',      'variety'),
+    'JTBC Entertainment':     ('JTBC',      'variety'),
+    'tvN':                    ('tvN',       'variety'),   # 환승연애, 연애남매 등
+    'ENA Channel':            ('ENA',       'variety'),
+    'Channel A 채널A':        ('Channel A', 'variety'),
+    'MBN 엠비엔':             ('MBN',       'variety'),
+    # ── 서바이벌 특화 ──────────────────────────────────────
+    'Mnet':                   ('Mnet',      'survival'),
+    'M2':                     ('Mnet',      'survival'),  # CJ ENM 퍼포먼스 채널
+    # ── 드라마 ─────────────────────────────────────────────
+    'tvN 드라마':              ('tvN',       'drama'),
+    'MBC Drama':              ('MBC',       'drama'),
+    'SBS Drama':              ('SBS',       'drama'),
+    'JTBC Drama':             ('JTBC',      'drama'),
+    # ── 음악 방송 ──────────────────────────────────────────
+    'KBS Kpop':               ('KBS2',      'music'),    # 뮤직뱅크 공식 채널
+    'MBC M':                  ('MBC',       'music'),    # 쇼! 음악중심
+    'SBS MTV':                ('SBS',       'music'),    # 인기가요
+    'M COUNTDOWN Mnet':       ('Mnet',      'music'),    # M카운트다운
 }
 
 _CACHE_FILE = os.path.join(os.path.dirname(__file__), '..', '.yt_channel_cache.json')
@@ -170,6 +181,10 @@ def _extract_show_info(title: str) -> dict | None:
 def _infer_category(show_name: str, channel_hint: str) -> str:
     n = show_name
     nu = n.upper()
+    if channel_hint == 'music':
+        return 'music'
+    if any(k in n for k in ['뮤직뱅크', '음악중심', '인기가요', '카운트다운', '쇼챔피언']):
+        return 'music'
     if any(k in n for k in ['서바이벌', '배틀', '경쟁', '피지컬', '흑백', '아이돌', '오디션', '파이터']):
         return 'survival'
     if any(k in n for k in ['연애', '솔로', '환승', '커플', '결혼', '하트', '시그널']):
