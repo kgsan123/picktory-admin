@@ -25,6 +25,7 @@ YT_CHANNEL_QUERIES = {
     'JTBC Entertainment': ('JTBC',  'variety'),
     'tvN 드라마':          ('tvN',   'drama'),
     'Mnet':               ('Mnet',  'survival'),
+    'M2':                 ('Mnet',  'survival'),   # CJ ENM 퍼포먼스 채널 (Mnet 보조 신호)
     'ENA Channel':        ('ENA',   'variety'),
     'MBC Drama':          ('MBC',   'drama'),
     'SBS Drama':          ('SBS',   'drama'),
@@ -168,9 +169,12 @@ def _extract_show_info(title: str) -> dict | None:
 
 def _infer_category(show_name: str, channel_hint: str) -> str:
     n = show_name
-    if any(k in n for k in ['서바이벌', '배틀', '경쟁', '피지컬', '흑백', '아이돌', '오디션']):
+    nu = n.upper()
+    if any(k in n for k in ['서바이벌', '배틀', '경쟁', '피지컬', '흑백', '아이돌', '오디션', '파이터']):
         return 'survival'
-    if any(k in n for k in ['연애', '솔로', '환승', '커플', '결혼', '하트', '나는 솔로']):
+    if any(k in n for k in ['연애', '솔로', '환승', '커플', '결혼', '하트', '시그널']):
+        return 'romance'
+    if any(k in nu for k in ['SOLO', 'HEART', 'LOVE']):
         return 'romance'
     if channel_hint == 'drama':
         return 'drama'
@@ -203,7 +207,8 @@ def _resolve_channel_id(yt, query: str) -> str | None:
 
 
 def _scan_channel(yt, channel_id: str, channel_name: str,
-                  broadcast: str, category_hint: str, days: int) -> list[dict]:
+                  broadcast: str, category_hint: str, days: int,
+                  min_clips: int = 3) -> list[dict]:
     """채널의 최근 업로드를 스캔해 현재 방영중 프로그램 목록 반환."""
     published_after = (datetime.now(KST) - timedelta(days=days)).isoformat()
 
@@ -246,8 +251,7 @@ def _scan_channel(yt, channel_id: str, channel_name: str,
         if ep > counts[name]['latest_episode']:
             counts[name]['latest_episode'] = ep
 
-    # 7일 내 3개 이상 클립이 있어야 현재 방영중으로 판단
-    return [v for v in counts.values() if v['clip_count_7d'] >= 3]
+    return [v for v in counts.values() if v['clip_count_7d'] >= min_clips]
 
 
 def scan_yt_channels(days: int = 7) -> list[dict]:
@@ -269,7 +273,9 @@ def scan_yt_channels(days: int = 7) -> list[dict]:
         if not ch_id:
             log.warning(f'{ch_query} 채널 ID 조회 실패, 건너뜀')
             continue
-        found = _scan_channel(yt, ch_id, ch_query, broadcast, cat_hint, days)
+        # Mnet/M2는 쇼당 클립이 적어 기준 완화
+        min_clips = 2 if broadcast == 'Mnet' else 3
+        found = _scan_channel(yt, ch_id, ch_query, broadcast, cat_hint, days, min_clips)
         log.info(f'{ch_query}: {len(found)}개 발견')
         results.extend(found)
 

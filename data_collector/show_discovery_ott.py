@@ -4,6 +4,7 @@ Netflix TOP10 TSV (KR 필터) + Tving 랭킹 Playwright.
 """
 import csv
 import io
+import json
 import re
 import sys
 import logging
@@ -28,9 +29,12 @@ def _has_korean(text: str) -> bool:
 
 
 def _infer_category(title: str) -> str:
-    if any(k in title for k in ['연애', '솔로', '커플', '결혼', '하트']):
+    t = title.upper()
+    if any(k in title for k in ['연애', '솔로', '커플', '결혼', '하트', '시그널']):
         return 'romance'
-    if any(k in title for k in ['서바이벌', '경쟁', '피지컬', '배틀']):
+    if any(k in t for k in ['SOLO', 'HEART', 'LOVE']):
+        return 'romance'
+    if any(k in title for k in ['서바이벌', '경쟁', '피지컬', '배틀', '파이터', '전설']):
         return 'survival'
     return 'variety'
 
@@ -98,7 +102,8 @@ def scan_netflix_kr() -> list[dict]:
 
 def scan_tving() -> list[dict]:
     """
-    Tving 랭킹 페이지에서 현재 인기 한국 콘텐츠 추출.
+    Tving 랭킹 페이지 VOD 순위에서 현재 인기 한국 콘텐츠 추출.
+    __NEXT_DATA__ JSON에서 VOD_BASIC_RANKING 밴드를 직접 파싱.
     Returns: [{name, channel, category, clip_count_7d, source}]
     """
     try:
@@ -112,12 +117,30 @@ def scan_tving() -> list[dict]:
         with sync_playwright() as pw:
             browser = pw.chromium.launch(headless=True)
             page = browser.new_page(user_agent=USER_AGENT)
-            page.goto('https://www.tving.com/ranking/content', timeout=20000)
-            page.wait_for_load_state('networkidle', timeout=15000)
+            page.goto('https://www.tving.com/ranking/content', timeout=40000)
+            page.wait_for_load_state('domcontentloaded', timeout=30000)
+            page.wait_for_timeout(3000)
 
-            items = page.query_selector_all('.ranking-item .title, [class*="ranking"] [class*="title"]')
-            for i, el in enumerate(items[:20], 1):
-                title = (el.inner_text() or '').strip()
+            html = page.content()
+            browser.close()
+
+        # __NEXT_DATA__ JSON에서 VOD_BASIC_RANKING 추출
+        m = re.search(
+            r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>',
+            html, re.DOTALL
+        )
+        if not m:
+            log.warning('Tving __NEXT_DATA__ 없음')
+            return []
+
+        data = json.loads(m.group(1))
+        bands = data['props']['pageProps']['boardMainData']['bands']
+
+        for band in bands:
+            if band.get('bandType') != 'VOD_BASIC_RANKING':
+                continue
+            for i, item in enumerate(band.get('items', [])[:20], 1):
+                title = item.get('title', '').strip()
                 if not title or not _has_korean(title):
                     continue
                 if _is_rerun(title):
@@ -131,7 +154,8 @@ def scan_tving() -> list[dict]:
                     'latest_episode': None,
                     'season': None,
                 })
-            browser.close()
+            break  # VOD_BASIC_RANKING 한 개만
+
     except Exception as e:
         log.warning(f'Tving 스캔 실패: {e}')
 
