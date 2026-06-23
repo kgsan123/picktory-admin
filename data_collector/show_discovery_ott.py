@@ -1,26 +1,17 @@
 """
 OTT 랭킹에서 현재 방영중 한국 콘텐츠 발견.
-Netflix TOP10 TSV (KR 필터) + Tving 랭킹 Playwright.
+Tving 랭킹 Playwright + Netflix Korea YouTube (show_discovery_yt.py).
 """
-import csv
-import io
 import json
 import re
-import sys
 import logging
-
-csv.field_size_limit(min(sys.maxsize, 2147483647))
-
-import requests
 
 log = logging.getLogger(__name__)
 USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-NETFLIX_TSV = 'https://top10.netflix.com/all-weeks-tv.tsv'
 
 RERUN_KEYWORDS = ['재방', '총집편', '다시보기', '클래식']
 
 # LIVE_RANKING에서 허용하는 방송 채널 목록 (화이트리스트 방식)
-# 이 목록에 없으면 재방/옛날 프로그램 전용 채널로 간주하고 제외
 BROADCAST_CHANNELS = {
     'MBC', 'MBC every1', 'SBS', 'SBS Plus', 'SBS funE',
     'KBS1', 'KBS2', 'KBS Joy', 'KBS Drama',
@@ -30,11 +21,16 @@ BROADCAST_CHANNELS = {
     'Tving',
 }
 
-# tving_new_episode 제목 기반 노이즈 필터
-TITLE_NOISE_KEYWORDS = ['더빙', '자막판', '애니', '토론', 'NEWS', '뉴스']
+# 제목 기반 노이즈 필터 — 애니/뉴스/더빙 키워드
+TITLE_NOISE_KEYWORDS = ['더빙', '자막판', '자막', '애니', '토론', 'NEWS', '뉴스']
 
-_BRACKET_EP = re.compile(r'^\[?\d+(?:회|화)\]')  # [199회], 37회로 시작
-_SINCE_YEAR = re.compile(r'\s+since\s+\d{4}', re.IGNORECASE)  # since 2014 제거
+# 일본 애니 시즌 표기: "23기", "24기 (더빙)" 등 — 한국 프로그램은 "시즌N" 사용
+_ANIME_SEASON = re.compile(r'\d+기\s*(?:\([^)]+\))?\s*$')
+# 장기 방영 임계치 — 이 이상은 수년째 방영 중인 구작 프로그램
+MAX_EPISODE_FOR_DISCOVERY = 300
+
+_BRACKET_EP = re.compile(r'^\[?\d+(?:회|화)\]')
+_SINCE_YEAR = re.compile(r'\s+since\s+\d{4}', re.IGNORECASE)
 
 
 def _is_rerun(title: str) -> bool:
@@ -51,7 +47,11 @@ def _is_valid_broadcast_channel(ch: str) -> bool:
 
 
 def _is_title_noise(title: str) -> bool:
-    return any(k in title for k in TITLE_NOISE_KEYWORDS)
+    if any(k in title for k in TITLE_NOISE_KEYWORDS):
+        return True
+    if _ANIME_SEASON.search(title):  # "23기", "2기 (자막)" 등 일본 애니 시즌 표기
+        return True
+    return False
 
 
 def _clean_title(title: str) -> str:
@@ -74,63 +74,13 @@ def _infer_category(title: str) -> str:
 
 def scan_netflix_kr() -> list[dict]:
     """
-    Netflix TOP10 TSV에서 한국어 타이틀만 추출.
-    한국어 문자 포함 여부로 한국 콘텐츠 판별.
-    Returns: [{name, channel, category, clip_count_7d(=rank score), source}]
+    Netflix KR 콘텐츠 발견 — YouTube 기반으로 전환.
+    (Netflix TOP10 TSV URL이 2025년 이후 HTML 리디렉션으로 변경되어 사용 불가)
+    실제 Netflix 예능은 show_discovery_yt.py의 'Netflix Korea' 채널에서 탐지됨.
+    이 함수는 하위 호환성 유지를 위해 빈 리스트를 반환합니다.
     """
-    try:
-        resp = requests.get(
-            NETFLIX_TSV, headers={'User-Agent': USER_AGENT}, timeout=15
-        )
-        resp.raise_for_status()
-    except Exception as e:
-        log.warning(f'Netflix TSV 다운로드 실패: {e}')
-        return []
-
-    try:
-        reader = csv.DictReader(io.StringIO(resp.text), delimiter='\t')
-        rows = list(reader)
-    except Exception as e:
-        log.warning(f'Netflix TSV 파싱 실패: {e}')
-        return []
-
-    # 가장 최신 주차 데이터만 사용
-    weeks = sorted({r.get('week', '') for r in rows if r.get('week')}, reverse=True)
-    latest_week = weeks[0] if weeks else None
-
-    seen: dict[str, dict] = {}
-    for row in rows:
-        if latest_week and row.get('week') != latest_week:
-            continue
-
-        title = row.get('show_title', '') or row.get('season_title', '')
-        if not title or not _has_korean(title):
-            continue
-        if _is_rerun(title):
-            continue
-
-        rank_str = row.get('weekly_rank', '')
-        try:
-            rank = int(rank_str)
-        except (ValueError, TypeError):
-            continue
-
-        if rank > 10:
-            continue
-
-        if title not in seen:
-            seen[title] = {
-                'name': title,
-                'channel': 'Netflix',
-                'category': _infer_category(title),
-                'clip_count_7d': 11 - rank,  # rank 1 = 10, rank 10 = 1
-                'source': 'netflix_top10',
-                'latest_episode': None,
-                'season': None,
-            }
-
-    log.info(f'Netflix KR: {len(seen)}개 발견 (주차: {latest_week})')
-    return list(seen.values())
+    log.info('Netflix: YouTube 기반 탐지로 전환 (show_discovery_yt.py 참고)')
+    return []
 
 
 _EP_SUFFIX = re.compile(r'\s*\d+(?:화|회)\s*$')
@@ -227,6 +177,8 @@ def scan_tving() -> list[dict]:
                     show_name, ep = _strip_episode(raw_title)
                     if ep is None:
                         continue  # 에피소드 번호 없음 = 에피소드 내용 제목일 가능성 높음
+                    if ep > MAX_EPISODE_FOR_DISCOVERY:
+                        continue  # 300회 초과 = 수년째 방영 중인 구작 → 발견 대상 아님
                     show_name = _clean_title(show_name)
                     if not show_name or len(show_name) < 2 or not _has_korean(show_name):
                         continue

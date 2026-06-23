@@ -41,6 +41,8 @@ YT_CHANNEL_QUERIES = {
     'MBC M':                  ('MBC',       'music'),    # 쇼! 음악중심
     'SBS MTV':                ('SBS',       'music'),    # 인기가요
     'M COUNTDOWN Mnet':       ('Mnet',      'music'),    # M카운트다운
+    # ── Netflix ────────────────────────────────────────────────
+    'Netflix Korea':          ('Netflix',   'variety'),  # 솔로지옥, 피지컬100 등
 }
 
 _CACHE_FILE = os.path.join(os.path.dirname(__file__), '..', '.yt_channel_cache.json')
