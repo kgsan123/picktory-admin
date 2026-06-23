@@ -1,0 +1,10 @@
+[
+  {
+    "name": "프로그램 이름",
+    "category": "romance",
+    "channel": "tvN",
+    "air_days": ["Mon", "Tue"],
+    "air_time_kst": "21:20",
+    "current_episode": 1
+  }
+]

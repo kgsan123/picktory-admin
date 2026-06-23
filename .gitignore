@@ -1,6 +1,11 @@
 .env
 .claude/
 __pycache__/
+.yt_channel_cache.json
+_debug_*.py
+_debug_*.json
+_discover*.txt
+_yt_result.txt
 *.pyc
 *.pyo
 .pytest_cache/
