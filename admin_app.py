@@ -31,7 +31,7 @@ def check_auth():
     if st.session_state.get('authenticated'):
         return True
     st.title('🎯 PICKTORY Admin')
-    pin = st.text_input('PIN 입력', type='password', max_chars=8)
+    pin = st.text_input('PIN 입력', type='password')
     if st.button('접속'):
         if pin == ADMIN_PIN:
             st.session_state['authenticated'] = True
