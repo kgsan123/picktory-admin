@@ -72,12 +72,16 @@ RERUN_KEYWORDS = [
     '오늘의 명장면', '옛날', '레전드',
 ]
 
-# 프로그램명으로 쓰일 수 없는 일반 단어 — 채널 내 공통 영상 제목에서 걸러냄
-GENERIC_NAMES = {
+# 클립 타입 키워드 — 프로그램명이 아닌 영상 유형
+# 추출된 이름에 이 단어가 하나라도 포함되면 제외
+# (정확히 일치뿐 아니라 "아티스트 티저", "MBC 하이라이트" 같은 조합도 걸러냄)
+CLIP_TYPE_WORDS = {
     '선공개', '하이라이트', '스페셜', '메이킹', '예고', '예고편',
     '비하인드', '종합', '모아보기', '티저', '클립', '풀버전', '전편',
-    'SUB', 'ENG', 'BEHIND', '하이라이트 모음',
+    'SUB', 'ENG', 'BEHIND', '하이라이트모음', '다시보기',
 }
+_NAME_SPLIT = re.compile(r'[\s\-|·•#–—]+')
+_EMOJI = re.compile(r'[^\w\s가-힣ㄱ-ㅎㅏ-ㅣ\-]')  # 이모지/특수기호 제거
 
 # 에피소드 마커 패턴
 EP_PATTERN = re.compile(
@@ -250,8 +254,14 @@ def _scan_channel(yt, channel_id: str, channel_name: str,
         info = _extract_show_info(title)
         if not info:
             continue
-        name = info['name'].lstrip('#').strip()  # '#피크타임' → '피크타임'
-        if name in GENERIC_NAMES or len(name) < 2:
+        name = _EMOJI.sub('', info['name']).strip()  # 이모지·특수기호 제거
+        name = name.lstrip('#').strip()             # '#피크타임' → '피크타임'
+        if len(name) < 2:
+            continue
+        # 단어 레벨 체크: 이름 구성 단어 중 하나라도 클립 타입이면 제외
+        # "아티스트 티저" → ["아티스트", "티저"] → "티저" 검출
+        if any(w.upper() in {k.upper() for k in CLIP_TYPE_WORDS}
+               for w in _NAME_SPLIT.split(name) if w):
             continue
         if name not in counts:
             counts[name] = {

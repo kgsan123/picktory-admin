@@ -65,32 +65,6 @@
     "status": "pending"
   },
   {
-    "name": "선공개",
-    "season": null,
-    "channel": "SBS",
-    "category": "variety",
-    "air_days": [],
-    "air_time_kst": "",
-    "current_episode": 2,
-    "source": "youtube_SBS 예능",
-    "clip_count_7d": 3,
-    "discovered_at": "2026-06-23T19:57:40.695960+09:00",
-    "status": "pending"
-  },
-  {
-    "name": "#피크타임",
-    "season": null,
-    "channel": "KBS2",
-    "category": "variety",
-    "air_days": [],
-    "air_time_kst": "",
-    "current_episode": 1,
-    "source": "youtube_KBS 예능",
-    "clip_count_7d": 4,
-    "discovered_at": "2026-06-23T19:57:40.695960+09:00",
-    "status": "pending"
-  },
-  {
     "name": "톡파원 25시",
     "season": null,
     "channel": "JTBC",
@@ -104,19 +78,6 @@
     "status": "pending"
   },
   {
-    "name": "하이라이트",
-    "season": null,
-    "channel": "JTBC",
-    "category": "variety",
-    "air_days": [],
-    "air_time_kst": "",
-    "current_episode": 2,
-    "source": "youtube_JTBC Entertainment",
-    "clip_count_7d": 6,
-    "discovered_at": "2026-06-23T19:57:40.695960+09:00",
-    "status": "pending"
-  },
-  {
     "name": "냉장고를 부탁해",
     "season": null,
     "channel": "JTBC",
@@ -127,32 +88,6 @@
     "source": "youtube_JTBC Entertainment",
     "clip_count_7d": 10,
     "discovered_at": "2026-06-23T19:58:44.811421+09:00",
-    "status": "pending"
-  },
-  {
-    "name": "스페셜",
-    "season": null,
-    "channel": "JTBC",
-    "category": "variety",
-    "air_days": [],
-    "air_time_kst": "",
-    "current_episode": 1,
-    "source": "youtube_JTBC Entertainment",
-    "clip_count_7d": 5,
-    "discovered_at": "2026-06-23T19:57:40.695960+09:00",
-    "status": "pending"
-  },
-  {
-    "name": "메이킹",
-    "season": null,
-    "channel": "tvN",
-    "category": "drama",
-    "air_days": [],
-    "air_time_kst": "",
-    "current_episode": 1,
-    "source": "youtube_tvN 드라마",
-    "clip_count_7d": 6,
-    "discovered_at": "2026-06-23T19:57:40.695960+09:00",
     "status": "pending"
   },
   {
@@ -191,32 +126,6 @@
     "current_episode": 9,
     "source": "youtube_JTBC Drama",
     "clip_count_7d": 24,
-    "discovered_at": "2026-06-23T19:58:44.811421+09:00",
-    "status": "pending"
-  },
-  {
-    "name": "습콕📌",
-    "season": null,
-    "channel": "SBS",
-    "category": "variety",
-    "air_days": [],
-    "air_time_kst": "",
-    "current_episode": 1,
-    "source": "youtube_SBS 예능",
-    "clip_count_7d": 5,
-    "discovered_at": "2026-06-23T19:58:44.811421+09:00",
-    "status": "pending"
-  },
-  {
-    "name": "아티스트 티저",
-    "season": null,
-    "channel": "SBS",
-    "category": "variety",
-    "air_days": [],
-    "air_time_kst": "",
-    "current_episode": 4,
-    "source": "youtube_SBS 예능",
-    "clip_count_7d": 3,
     "discovered_at": "2026-06-23T19:58:44.811421+09:00",
     "status": "pending"
   },
