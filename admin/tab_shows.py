@@ -61,9 +61,8 @@ def _show_card(db, s: dict):
 
     with st.container(border=True):
         # ── 헤더: 제목 + 카테고리 배지 ──────────────────
-        h_title, h_badge = st.columns([3, 1], vertical_alignment='center')
-        h_title.markdown(f"#### {CAT_EMOJI.get(cat, '📺')} {s['name']}")
-        h_badge.badge(CAT_LABEL.get(cat, cat), color=CAT_COLOR.get(cat, 'gray'))
+        st.markdown(f"**{CAT_EMOJI.get(cat, '📺')} {s['name']}**")
+        st.badge(CAT_LABEL.get(cat, cat), color=CAT_COLOR.get(cat, 'gray'))
 
         # ── 메타 정보 라인 ──────────────────────────────
         meta = s.get('channel') or '방송사 미지정'
@@ -71,19 +70,16 @@ def _show_card(db, s: dict):
             meta += ' · 일회성'
         elif days or air_time:
             meta += f" · {days} {air_time}".rstrip()
-        st.caption(f"📡 {meta}　|　🔢 현재 {ep_now}회 추적 중")
+        st.caption(f"{meta}　·　현재 {ep_now}회")
 
-        st.divider()
-
-        # ── 액션: 회차 입력 + 생성 버튼 ─────────────────
-        a_ep, a_btn = st.columns([1, 1], vertical_alignment='bottom')
-        ep_input = a_ep.number_input(
+        # ── 액션: 회차 입력 + 생성 버튼 (좁은 카드 → 세로 배치) ──
+        ep_input = st.number_input(
             '방영된 회차', min_value=1, value=ep_now,
             key=f'ep_{sid}',
             help='방금 방영 끝난 회차 → 다음 회차 예측 자동 생성',
         )
-        gen_btn = a_btn.button('예측 생성 ▶', key=f'gen_{sid}',
-                                type='primary', use_container_width=True)
+        gen_btn = st.button('예측 생성 ▶', key=f'gen_{sid}',
+                            type='primary', use_container_width=True)
 
         # ── 컨텍스트 + 설정 expander ────────────────────
         with st.expander('컨텍스트 · 설정', expanded=False):
@@ -154,25 +150,31 @@ def render(db):
     shows = (db.table('shows').select('*').eq('ended', False)
              .order('category').order('name').execute().data or [])
 
-    head_l, head_r = st.columns([3, 1], vertical_alignment='center')
-    head_l.subheader(f'추적 프로그램 · {len(shows)}개')
+    st.subheader(f'추적 프로그램 · {len(shows)}개')
 
     if not shows:
         st.info('추적 중인 프로그램 없음 — 아래에서 추가하세요')
     else:
-        # 카테고리 필터
+        # 카테고리 필터 (전체 + 존재하는 카테고리)
         cats_present = sorted({s.get('category', 'variety') for s in shows})
-        filt = head_r.selectbox(
-            '카테고리 필터', ['전체'] + cats_present,
-            format_func=lambda c: c if c == '전체' else f'{CAT_EMOJI.get(c, "📺")} {CAT_LABEL.get(c, c)}',
-            label_visibility='collapsed', key='cat_filter',
-        )
+        counts = {c: sum(1 for s in shows if s.get('category') == c) for c in cats_present}
+        options = ['전체'] + cats_present
+
+        def _fmt(c):
+            if c == '전체':
+                return f'전체 ({len(shows)})'
+            return f'{CAT_EMOJI.get(c, "📺")} {CAT_LABEL.get(c, c)} ({counts[c]})'
+
+        filt = st.segmented_control(
+            '카테고리 필터', options, default='전체',
+            format_func=_fmt, label_visibility='collapsed', key='cat_filter',
+        ) or '전체'
         visible = [s for s in shows if filt == '전체' or s.get('category') == filt]
 
-        # 2열 카드 그리드
-        cols = st.columns(2, gap='medium')
+        # 4열 카드 그리드
+        cols = st.columns(4, gap='small')
         for i, s in enumerate(visible):
-            with cols[i % 2]:
+            with cols[i % 4]:
                 _show_card(db, s)
 
     with st.expander('＋ 새 프로그램 추가'):
