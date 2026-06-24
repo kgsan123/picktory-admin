@@ -11,10 +11,13 @@ import re
 import sys
 import time
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 
 import feedparser
 import requests
 from bs4 import BeautifulSoup
+
+KST = timezone(timedelta(hours=9))
 
 UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
 TIMEOUT = 8
@@ -58,11 +61,13 @@ def _extract_names(snippets: list[str]) -> list[str]:
                 seen.add(label)
                 result.append(label)
         # 패턴 2: "영자씨", "영식이" — 호칭이 붙은 이름 (2~3자)
-        for m in re.finditer(r'([가-힣]{2,3})(씨|이(?=[가-힣\s])|야|아(?=[가-힣\s]))', text):
-            name = m.group(1)
-            if name not in seen and not _is_common_word(name):
-                seen.add(name)
-                result.append(name)
+        # 단, X기 패턴 이름이 이미 충분하면 skip (오탐 줄이기)
+        if len(result) < 3:
+            for m in re.finditer(r'([가-힣]{2,3})(씨|이(?=[가-힣\s])|야|아(?=[가-힣\s]))', text):
+                name = m.group(1)
+                if name not in seen and not _is_common_word(name) and len(name) >= 2:
+                    seen.add(name)
+                    result.append(name)
 
     return result
 
@@ -83,9 +88,10 @@ def _is_common_word(word: str) -> bool:
 class EpisodeContext:
     news_snippets: list[str] = field(default_factory=list)
     community_posts: list[str] = field(default_factory=list)
-    chart_snippets: list[str] = field(default_factory=list)   # 음악방송 전용
-    cast_names: list[str] = field(default_factory=list)       # 컨텍스트에서 추출한 이름
-    show_notes: str = ''                                       # 프로그램 형식 설명
+    trailer_snippets: list[str] = field(default_factory=list)  # 다음 회차 예고
+    chart_snippets: list[str] = field(default_factory=list)    # 음악방송 전용
+    cast_names: list[str] = field(default_factory=list)        # 컨텍스트에서 추출한 이름
+    show_notes: str = ''                                        # 프로그램 형식 설명
     sources_used: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
 
@@ -102,12 +108,18 @@ class EpisodeContext:
             parts.append('[이번 회차 등장인물] 컨텍스트에서 이름 확인 불가')
             parts.append('※ 이름을 만들어 내지 마세요. 이름 없이 가능한 유형(선택 결과, 순위, 이벤트 발생 여부)으로만 예측 작성.')
         if self.news_snippets:
-            parts.append('[뉴스 기사]')
+            parts.append(f'[{self._ep_label()}회 방영 후 뉴스]')
             parts.extend(f'- {s}' for s in self.news_snippets[:5])
         if self.community_posts:
-            parts.append('[커뮤니티 반응]')
+            parts.append(f'[{self._ep_label()}회 커뮤니티 반응]')
             parts.extend(f'- {s}' for s in self.community_posts[:5])
+        if self.trailer_snippets:
+            parts.append('[다음 회차 예고]')
+            parts.extend(f'- {s}' for s in self.trailer_snippets[:3])
         return '\n'.join(parts)
+
+    def _ep_label(self) -> str:
+        return 'N'  # 회차 번호는 generator에서 삽입
 
     def to_chart_text(self) -> str:
         if not self.chart_snippets:
@@ -118,9 +130,26 @@ class EpisodeContext:
         return not self.news_snippets and not self.community_posts and not self.chart_snippets
 
 
+def _entry_datetime(entry) -> datetime | None:
+    """feedparser entry의 published 날짜를 UTC datetime으로 반환."""
+    tp = entry.get('published_parsed')
+    if not tp:
+        return None
+    try:
+        return datetime(*tp[:6], tzinfo=timezone.utc)
+    except Exception:
+        return None
+
+
 def _google_rss(query: str, ctx: EpisodeContext, label: str,
                 is_community: bool = False, program_name: str = '',
-                exclude_terms: list[str] | None = None) -> None:
+                exclude_terms: list[str] | None = None,
+                after_dt: datetime | None = None,
+                require_program_name: bool = False) -> None:
+    """
+    after_dt: 이 시각 이후 발행된 기사만 수집 (방영 후 콘텐츠 필터).
+              None이면 날짜 필터 없음.
+    """
     try:
         feed = feedparser.parse(
             f'{GOOGLE_RSS}?q={requests.utils.quote(query)}&hl=ko&gl=KR&ceid=KR:ko'
@@ -128,28 +157,46 @@ def _google_rss(query: str, ctx: EpisodeContext, label: str,
         results = []
         keywords = [w for w in re.split(r'\s+', program_name) if len(w) >= 2] if program_name else []
         excl = [e.lower() for e in (exclude_terms or [])]
-        for entry in feed.entries[:8]:
+        # 방영 전 예고 키워드 — 날짜 필터 있을 때 추가 제외
+        preview_kw = ['예고', '예상', '미리보기', '스포'] if after_dt else []
+
+        for entry in feed.entries[:10]:
+            # 날짜 필터: 방영 시각 이후 발행된 글만
+            if after_dt:
+                pub = _entry_datetime(entry)
+                if pub and pub < after_dt:
+                    continue
+
             title = re.sub(r'\s*-\s*[^-]{1,30}$', '', entry.get('title', '')).strip()
-            title_raw = title  # 제외 필터는 클린 전 원본으로
+            title_raw = title
             title = _clean(title)
-            summary = _clean(entry.get('summary', ''))[:80]
+            summary = _clean(entry.get('summary', ''))[:120]
             if not title:
                 continue
-            # 제외 키워드 포함 기사 skip
+
             combined_raw = (title_raw + entry.get('summary', '')).lower()
+            # 제외 키워드
             if excl and any(e in combined_raw for e in excl):
                 continue
+            # 방영 전 예고 기사 제외
+            if preview_kw and any(kw in combined_raw for kw in preview_kw):
+                continue
+
             text = title if not summary or summary[:30] in title else f'{title}. {summary}'
-            # 커뮤니티 포스트: 관련 키워드 없으면 skip
-            if is_community and keywords:
+            # 커뮤니티 또는 require_program_name: 프로그램명 포함 여부 확인
+            if (is_community or require_program_name) and keywords:
                 combined = (title + summary).replace(' ', '')
                 if not any(kw.replace(' ', '') in combined for kw in keywords):
                     continue
             results.append(text)
 
         if results:
-            target = ctx.community_posts if is_community else ctx.news_snippets
-            target.extend(results[:5])
+            if label == 'trailer':
+                ctx.trailer_snippets.extend(results[:3])
+            elif is_community:
+                ctx.community_posts.extend(results[:6])
+            else:
+                ctx.news_snippets.extend(results[:6])
             ctx.sources_used.append(label)
     except Exception as e:
         ctx.errors.append(f'{label}: {e}')
@@ -205,25 +252,55 @@ def _dcinside(query: str, ctx: EpisodeContext) -> None:
 
 
 def fetch_episode_context(program_name: str, episode_num: int,
-                          category: str = 'drama', show_notes: str = '') -> EpisodeContext:
+                          category: str = 'drama', show_notes: str = '',
+                          aired_at: datetime | None = None) -> EpisodeContext:
     """
-    카테고리별 컨텍스트 수집.
-    show_notes: DB shows.notes 필드 — 프로그램 형식 설명, 프롬프트에 전달됨.
+    방영 후 콘텐츠(후기·반응·시청률)만 수집해 다음 회차 예측에 활용.
+    aired_at: 방영 시각 (KST datetime). 이 시각 이후 발행된 콘텐츠만 수집.
+    show_notes: DB shows.notes — AI에 전달되는 프로그램 형식 설명.
     """
     ctx = EpisodeContext()
     if show_notes:
         ctx.show_notes = show_notes
 
     excl = SHOW_EXCLUDE_TERMS.get(program_name, [])
+    # aired_at을 UTC로 변환 (feedparser는 UTC 기준)
+    after_dt: datetime | None = None
+    if aired_at:
+        if aired_at.tzinfo is None:
+            aired_at = aired_at.replace(tzinfo=KST)
+        after_dt = aired_at.astimezone(timezone.utc)
 
-    # 공통: 회차 명시 뉴스 → 프로그램명 뉴스
-    _google_rss(f'{program_name} {episode_num}회', ctx, 'news_ep', exclude_terms=excl)
-    if not ctx.news_snippets:
-        _google_rss(program_name, ctx, 'news_name', exclude_terms=excl)
+    ep = str(episode_num)
 
-    # 더쿠 (Google 인덱싱) — 관련 없는 포스트 필터링
-    _google_rss(f'{program_name} site:theqoo.net', ctx, 'theqoo',
-                is_community=True, program_name=program_name, exclude_terms=excl)
+    # ── 1. 방영 후 뉴스 (시청률·후기·결과) ──────────────────────
+    # 가장 구체적인 쿼리부터 시도
+    for q in [
+        f'{program_name} {ep}회 시청률',
+        f'{program_name} {ep}회 후기',
+        f'{program_name} {ep}회',
+        program_name,
+    ]:
+        _google_rss(q, ctx, f'news_{q[:10]}',
+                    program_name=program_name, exclude_terms=excl,
+                    after_dt=after_dt, require_program_name=True)
+        if len(ctx.news_snippets) >= 4:
+            break
+
+    # ── 2. 다음 회차 예고 (trailer_snippets에 저장) ──────────────
+    next_ep = str(episode_num + 1)
+    _google_rss(f'{program_name} {next_ep}회 예고', ctx, 'trailer',
+                program_name=program_name, exclude_terms=excl,
+                require_program_name=True)  # 관련 없는 예고 차단
+
+    # ── 3. 커뮤니티 반응 (더쿠 via Google) ──────────────────────
+    _google_rss(f'{program_name} {ep}회 site:theqoo.net', ctx, 'theqoo',
+                is_community=True, program_name=program_name,
+                exclude_terms=excl, after_dt=after_dt)
+    if not ctx.community_posts:
+        _google_rss(f'{program_name} site:theqoo.net', ctx, 'theqoo_general',
+                    is_community=True, program_name=program_name,
+                    exclude_terms=excl, after_dt=after_dt)
 
     # DC인사이드
     _dcinside(program_name, ctx)

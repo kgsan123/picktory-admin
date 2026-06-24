@@ -226,10 +226,25 @@ def generate_episode_predictions(episode_id: str, extra_context: dict | None = N
         try:
             from data_collector.context_fetcher import fetch_episode_context
             category = ep.get('category', 'drama')
-            ep_ctx = fetch_episode_context(program_name, ep_num, category=category,
-                                           show_notes=show_notes)
+            # aired_at 파싱 (KST datetime)
+            from datetime import datetime as _dt
+            from zoneinfo import ZoneInfo as _ZI
+            aired_at_raw = ep.get('aired_at')
+            aired_at_dt = None
+            if aired_at_raw:
+                try:
+                    aired_at_dt = _dt.fromisoformat(str(aired_at_raw).replace('Z', '+00:00'))
+                except Exception:
+                    pass
+
+            ep_ctx = fetch_episode_context(
+                program_name, ep_num, category=category,
+                show_notes=show_notes, aired_at=aired_at_dt,
+            )
             auto_text = ep_ctx.to_prompt_text() or ep.get('news_summary') or ''
             chart_text = ep_ctx.to_chart_text()
+            # 자동 수집 예고를 operator 미입력시 fallback으로 사용
+            auto_trailer = '\n'.join(ep_ctx.trailer_snippets) if ep_ctx.trailer_snippets else ''
             if auto_text:
                 client.table('episodes').update(
                     {'news_summary': auto_text[:1000]}
@@ -240,10 +255,16 @@ def generate_episode_predictions(episode_id: str, extra_context: dict | None = N
             log.warning(f'context_fetcher 실패 (무시): {e}')
             auto_text = ep.get('news_summary') or ''
             chart_text = ''
+            auto_trailer = ''
+
+    # trailer_hints: 운영자 직접 입력 > 자동 수집 예고
+    trailer_hints = (extra_context or {}).get('trailer_hints', '').strip()
+    if not trailer_hints:
+        trailer_hints = auto_trailer
 
     context: dict = {
         'episode_summary': auto_text,
-        'trailer_hints': (extra_context or {}).get('trailer_hints') or '',
+        'trailer_hints': trailer_hints,
         'news_summary': auto_text,
         'chart_context': chart_text,
     }
