@@ -97,14 +97,18 @@ ALTER TABLE episodes ADD COLUMN IF NOT EXISTS pipeline_status VARCHAR DEFAULT 'd
 -- New table: predictions
 CREATE TABLE IF NOT EXISTS predictions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    episode_id UUID REFERENCES episodes(id),
+    episode_id UUID REFERENCES episodes(id),  -- 예측을 생성한 회차 N
+    program_name VARCHAR,        -- 비정규화 (검증 조회 단순화)
+    target_episode_number INT,   -- 예측 대상 회차 N+1 (검증 시 이 키로 조회)
     category VARCHAR,   -- survival | romance | drama | music | variety
     title TEXT,
     content TEXT,       -- the prediction question shown to users
     options JSONB,      -- [{id, text, odds}]
     difficulty INT,     -- 1 (easy) to 5 (hard)
     fun_score INT,      -- 1-5, AI self-rating on engagement potential
-    verdict VARCHAR DEFAULT 'pending',  -- pending | correct | incorrect
+    verification_method TEXT,  -- how to confirm answer after airing
+    verdict VARCHAR DEFAULT 'pending',  -- pending | correct | incorrect (유력 후보가 맞았는지)
+    correct_option_id VARCHAR,  -- 실제 일어난 선택지 id (AI 판정)
     confidence FLOAT,   -- 0.0-1.0, AI confidence in verdict
     evidence_text TEXT, -- AI reasoning for verdict
     prompt_version VARCHAR,

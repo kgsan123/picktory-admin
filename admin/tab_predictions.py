@@ -45,14 +45,18 @@ def render(db):
             st.write(f"**질문:** {pred.get('content', '')}")
 
             opts = pred.get('options') or []
+            coid = pred.get('correct_option_id')
             if opts:
                 st.write('**선택지:**')
                 for o in opts:
                     pct = int(o.get('odds', 0) * 100)
-                    st.write(f"  {o.get('id')}. {o.get('text')}  ({pct}%)")
+                    mark = ' ✅ **(AI 판정 정답)**' if coid and o.get('id') == coid else ''
+                    st.write(f"  {o.get('id')}. {o.get('text')}  ({pct}%){mark}")
 
             st.caption(f"확인 방법: {pred.get('verification_method') or '-'}  ·  "
                        f"난이도: {'⭐' * int(pred.get('difficulty') or 0)}")
+            if pred.get('evidence_text'):
+                st.caption(f"🤖 판정 근거: {pred.get('evidence_text')}")
 
             st.divider()
             b1, b2, b3, b4 = st.columns(4)

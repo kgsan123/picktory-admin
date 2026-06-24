@@ -65,6 +65,13 @@ def _parse_predictions(text: str) -> list[dict] | None:
 
 _VAGUE_VERIFY = ['방영 후 확인', '해당 회차에서 확인', '추후 확인', '나중에 확인']
 
+# verification_method에 최소 하나는 있어야 하는 "장면" 어휘 (판별 가능성 양성검사)
+# 5종 프롬프트의 검증 예시 어휘를 전수 포함 — 정상 출력을 거르지 않도록
+_SCENE_KW = [
+    '발표', '호명', '장면', '공개', '등장', '투표', '순위', '결과', '클립',
+    '방송 종료', '방영 직후', '1위', '엔딩', '확인', '선택', '대결', '탈락', '우승',
+]
+
 # 의미상 YES/NO와 동일한 이진 반의어 쌍
 _BINARY_PAIRS = [
     {'진입', '미진입'}, {'성공', '실패'}, {'달성', '미달성'},
@@ -115,6 +122,10 @@ def _apply_filters(predictions: list[dict]) -> list[dict]:
         if any(v in verify for v in _VAGUE_VERIFY):
             log.debug(f"필터 제거 (verification 모호): {p.get('title')}")
             continue
+        # 장면 양성검사 — 구체적 판별 장면 어휘가 하나도 없으면 모호한 검증
+        if not any(k in verify for k in _SCENE_KW):
+            log.debug(f"필터 제거 (verification 장면 키워드 없음): {p.get('title')}")
+            continue
 
         if not options or len(options) < 3:
             log.debug(f"필터 제거 (선택지 2개 이하): {p.get('title')}")
@@ -156,6 +167,27 @@ def _apply_filters(predictions: list[dict]) -> list[dict]:
 
         kept.append(p)
     return kept
+
+
+# 같은 이벤트 유형을 가리키는 핵심 명사 (이벤트 다양성 확보용)
+_EVENT_KEYS = ['탈락', '1위', '우승', '게스트', '벌칙', '커플', '최종 선택',
+               '첫인상', '데이트', '고백', '미션', '컴백', '대결']
+
+def _dedupe(predictions: list[dict]) -> list[dict]:
+    """같은 이벤트를 다룬 예측이 2개를 넘으면 제거 — 6개가 서로 다른 이벤트가 되도록."""
+    result = []
+    event_count: dict[str, int] = {}
+    for p in predictions:
+        content = p.get('content', '')
+        # 이 예측이 어떤 이벤트를 다루는지 추정
+        key = next((k for k in _EVENT_KEYS if k in content), None)
+        if key:
+            if event_count.get(key, 0) >= 2:
+                log.debug(f"중복 제거 (이벤트 '{key}' 3번째): {p.get('title')}")
+                continue
+            event_count[key] = event_count.get(key, 0) + 1
+        result.append(p)
+    return result
 
 
 def generate_predictions(
@@ -223,7 +255,7 @@ def generate_predictions(
                 continue
 
             predictions = [_clean_prediction(p) for p in predictions]
-            filtered = _apply_filters(predictions)[:6]  # 최대 6개
+            filtered = _dedupe(_apply_filters(predictions))[:6]  # 필터 → 중복제거 → 최대 6개
             if len(filtered) >= 4:  # 4개 이상이면 통과 (필터로 일부 탈락 감안)
                 for p in filtered:
                     p['prompt_version'] = PROMPT_VERSION
@@ -296,7 +328,7 @@ def generate_episode_predictions(episode_id: str, extra_context: dict | None = N
             auto_trailer = '\n'.join(ep_ctx.trailer_snippets) if ep_ctx.trailer_snippets else ''
             if auto_text:
                 client.table('episodes').update(
-                    {'news_summary': auto_text[:1000]}
+                    {'news_summary': auto_text[:2500]}  # 줄거리 사실 앵커 보존
                 ).eq('id', episode_id).execute()
             if ep_ctx.errors:
                 log.debug(f'context_fetcher 부분 실패: {ep_ctx.errors}')
@@ -322,10 +354,15 @@ def generate_episode_predictions(episode_id: str, extra_context: dict | None = N
     if not predictions:
         return []
 
+    # 예측 대상 회차 = 방영된 회차 + 1 (검증 시점에 이 키로 조회)
+    target_ep = ep_num + 1
+
     rows = []
     for p in predictions:
         rows.append({
             'episode_id': episode_id,
+            'program_name': program_name,
+            'target_episode_number': target_ep,
             'category': p.get('category', ep.get('category', 'drama')),
             'title': p.get('title', ''),
             'content': p.get('content', ''),
@@ -340,13 +377,29 @@ def generate_episode_predictions(episode_id: str, extra_context: dict | None = N
         })
 
     if rows:
-        client.table('predictions').insert(rows).execute()
+        _insert_predictions(client, rows)
         client.table('episodes').update(
             {'pipeline_status': 'generated'}
         ).eq('id', episode_id).execute()
 
     log.info(f'예측 {len(rows)}개 저장 (episode_id={episode_id})')
     return rows
+
+
+# 마이그레이션 006 적용 전이면 없을 수 있는 컬럼
+_OPTIONAL_COLS = ['program_name', 'target_episode_number']
+
+def _insert_predictions(client, rows: list[dict]) -> None:
+    """예측 insert — 신규 컬럼이 DB에 없으면(마이그레이션 미적용) 제거 후 재시도."""
+    try:
+        client.table('predictions').insert(rows).execute()
+    except Exception as e:
+        if any(col in str(e) for col in _OPTIONAL_COLS):
+            log.warning('신규 컬럼 미적용(마이그레이션 006 필요) — 해당 컬럼 제외하고 저장')
+            stripped = [{k: v for k, v in r.items() if k not in _OPTIONAL_COLS} for r in rows]
+            client.table('predictions').insert(stripped).execute()
+        else:
+            raise
 
 
 if __name__ == '__main__':

@@ -91,7 +91,9 @@ class EpisodeContext:
     trailer_snippets: list[str] = field(default_factory=list)  # 다음 회차 예고
     chart_snippets: list[str] = field(default_factory=list)    # 음악방송 전용
     cast_names: list[str] = field(default_factory=list)        # 컨텍스트에서 추출한 이름
+    episode_summary: str = ''                                   # 나무위키 회차 줄거리(사실)
     show_notes: str = ''                                        # 프로그램 형식 설명
+    ep_num: int = 0                                             # 방영된 회차 번호
     sources_used: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
 
@@ -100,6 +102,10 @@ class EpisodeContext:
         # 프로그램 형식 설명 (있을 때)
         if self.show_notes:
             parts.append(f'[프로그램 형식] {self.show_notes}')
+        # 회차 줄거리(사실) — 최상단 앵커. AI가 학습데이터 대신 이 사실에 근거하도록.
+        if self.episode_summary:
+            parts.append(f'[{self._ep_label()}회 실제 줄거리(사실 — 이 내용에 근거하여 예측 작성)]')
+            parts.append(self.episode_summary)
         # 이름 목록 — 있으면 사용, 없으면 "이름 없음" 명시
         if self.cast_names:
             parts.append(f'[이번 회차 등장인물] {", ".join(self.cast_names)}')
@@ -119,7 +125,7 @@ class EpisodeContext:
         return '\n'.join(parts)
 
     def _ep_label(self) -> str:
-        return 'N'  # 회차 번호는 generator에서 삽입
+        return str(self.ep_num) if self.ep_num else 'N'
 
     def to_chart_text(self) -> str:
         if not self.chart_snippets:
@@ -127,7 +133,14 @@ class EpisodeContext:
         return '[이번 주 1위 후보 동향]\n' + '\n'.join(f'- {s}' for s in self.chart_snippets[:4])
 
     def is_empty(self) -> bool:
-        return not self.news_snippets and not self.community_posts and not self.chart_snippets
+        return (not self.news_snippets and not self.community_posts
+                and not self.chart_snippets and not self.episode_summary)
+
+    def has_sufficient_signal(self) -> bool:
+        """예측 생성에 충분한 신호가 있는지 — 환각 방지 게이트용."""
+        if self.episode_summary:
+            return True
+        return (len(self.news_snippets) + len(self.community_posts)) >= 2
 
 
 def _entry_datetime(entry) -> datetime | None:
@@ -260,6 +273,7 @@ def fetch_episode_context(program_name: str, episode_num: int,
     show_notes: DB shows.notes — AI에 전달되는 프로그램 형식 설명.
     """
     ctx = EpisodeContext()
+    ctx.ep_num = episode_num
     if show_notes:
         ctx.show_notes = show_notes
 
@@ -311,8 +325,22 @@ def fetch_episode_context(program_name: str, episode_num: int,
         if not ctx.chart_snippets:
             _google_rss_chart('이번주 음악방송 1위 후보', ctx, 'chart_general')
 
+    # ── 4. 나무위키 회차 줄거리 (사실 앵커) ──────────────────────
+    # 방영 후 수 시간 내 올라오는 회차 정리. 환각 차단의 핵심 신호.
+    try:
+        from .episode_summary import fetch_episode_summary
+        summary_result = fetch_episode_summary(program_name, episode_num)
+        summary_text = (summary_result.get('episode_summary') or '').strip()
+        if summary_text:
+            ctx.episode_summary = _clean(summary_text)
+            ctx.sources_used.append(summary_result.get('source', 'namu_wiki'))
+    except Exception as e:
+        ctx.errors.append(f'episode_summary 실패: {e}')
+
     # 모든 텍스트에서 출연자 이름 추출 (AI가 이 이름만 사용하도록)
     all_text = ctx.news_snippets + ctx.community_posts
+    if ctx.episode_summary:
+        all_text = all_text + [ctx.episode_summary]
     ctx.cast_names = _extract_names(all_text)
 
     return ctx

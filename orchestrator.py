@@ -84,6 +84,8 @@ def step_collect(episode_id: str, show: dict):
 
 
 def step_verify(episode_id: str, show: dict):
+    # 방금 방영된 회차 N을 대상으로, 직전 회차에 생성된 예측
+    # (target_episode_number == N)을 N의 fresh 데이터로 판정.
     from ai_engine.answer_verifier import verify_episode
     with_retry(
         verify_episode, episode_id,
