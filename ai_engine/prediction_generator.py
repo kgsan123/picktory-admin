@@ -23,7 +23,7 @@ KST = ZoneInfo('Asia/Seoul')
 
 PROMPT_DIR = Path(__file__).parent / 'prompts'
 MODEL = 'llama-3.3-70b-versatile'
-PROMPT_VERSION = 'v2'
+PROMPT_VERSION = 'v3'
 
 
 def _load_prompt(category: str) -> tuple[str, str]:
@@ -98,15 +98,17 @@ def generate_predictions(
     next_ep = (episode.get('episode_number') or 1) + 1
     system_prompt, user_template = _load_prompt(category)
 
-    user_msg = user_template.format(
-        program_name=episode.get('program_name', ''),
-        next_episode=next_ep,
-        episode_summary=context.get('episode_summary') or '정보 없음',
-        trailer_hints=context.get('trailer_hints') or '없음',
-        news_summary=context.get('news_summary') or '없음',
-        reaction_score=context.get('reaction_score') or 0,
-        top_clip_views=f"{context.get('top_clip_views', 0):,}",
-    )
+    # {chart_context}는 music 프롬프트에만 있으므로 없는 필드는 빈 문자열로 처리
+    from collections import defaultdict
+    fmt = defaultdict(str, {
+        'program_name': episode.get('program_name', ''),
+        'next_episode': str(next_ep),
+        'episode_summary': context.get('episode_summary') or '정보 없음',
+        'trailer_hints': context.get('trailer_hints') or '없음',
+        'news_summary': context.get('news_summary') or '없음',
+        'chart_context': context.get('chart_context') or '',
+    })
+    user_msg = user_template.format_map(fmt)
 
     api_key = os.environ.get('GROQ_API_KEY', '')
     if not api_key:
@@ -183,8 +185,10 @@ def generate_episode_predictions(episode_id: str, extra_context: dict | None = N
     else:
         try:
             from data_collector.context_fetcher import fetch_episode_context
-            ep_ctx = fetch_episode_context(program_name, ep_num)
+            category = ep.get('category', 'drama')
+            ep_ctx = fetch_episode_context(program_name, ep_num, category=category)
             auto_text = ep_ctx.to_prompt_text() or ep.get('news_summary') or ''
+            chart_text = ep_ctx.to_chart_text()
             if auto_text:
                 client.table('episodes').update(
                     {'news_summary': auto_text[:1000]}
@@ -194,13 +198,13 @@ def generate_episode_predictions(episode_id: str, extra_context: dict | None = N
         except Exception as e:
             log.warning(f'context_fetcher 실패 (무시): {e}')
             auto_text = ep.get('news_summary') or ''
+            chart_text = ''
 
     context: dict = {
         'episode_summary': auto_text,
         'trailer_hints': (extra_context or {}).get('trailer_hints') or '',
         'news_summary': auto_text,
-        'reaction_score': 0,
-        'top_clip_views': 0,
+        'chart_context': chart_text,
     }
 
     predictions = generate_predictions(ep, context)

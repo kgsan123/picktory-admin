@@ -153,6 +153,12 @@ def render(db):
         new_days = c5.multiselect('방영 요일', DAYS_OPTIONS, key='new_days')
         new_time = c6.text_input('방영 시각 (HH:MM)', key='new_time', placeholder='예: 21:30')
 
+        new_show_type = st.radio(
+            '방영 유형', ['regular', 'event'],
+            format_func=lambda x: '정기 방영' if x == 'regular' else '일회성 이벤트 (시상식 등)',
+            horizontal=True, key='new_show_type',
+        )
+
         if st.button('추가', type='primary', key='btn_add_show'):
             if not new_name.strip():
                 st.error('프로그램명을 입력하세요')
@@ -165,11 +171,12 @@ def render(db):
                         'name': new_name.strip(),
                         'channel': new_ch.strip(),
                         'category': new_cat,
-                        'air_days': new_days,
+                        'air_days': new_days if new_show_type == 'regular' else [],
                         'air_time_kst': new_time.strip(),
                         'current_episode': int(new_ep),
                         'ended': False,
+                        'show_type': new_show_type,
                         'source': 'manual',
                     }).execute()
-                    st.success(f'"{new_name}" 추가됨')
+                    st.success(f'"{new_name}" 추가됨 ({"일회성" if new_show_type == "event" else "정기"})')
                     st.rerun()
