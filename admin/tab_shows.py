@@ -9,6 +9,10 @@ DAYS_OPTIONS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 DAY_KR = {'Mon': '월', 'Tue': '화', 'Wed': '수', 'Thu': '목',
            'Fri': '금', 'Sat': '토', 'Sun': '일'}
 CAT_EMOJI = {'romance': '💕', 'survival': '⚔️', 'variety': '🎉', 'drama': '🎭', 'music': '🎵'}
+CAT_COLOR = {'romance': 'red', 'survival': 'orange', 'variety': 'green',
+             'drama': 'violet', 'music': 'blue'}
+CAT_LABEL = {'romance': '연애', 'survival': '서바이벌', 'variety': '예능',
+             'drama': '드라마', 'music': '음악'}
 
 
 def _upsert_episode(db, show: dict, episode_num: int) -> str | None:
@@ -53,78 +57,89 @@ def _show_card(db, s: dict):
     days = ''.join(DAY_KR.get(d, d) for d in (s.get('air_days') or []))
     air_time = s.get('air_time_kst', '')
     ep_now = int(s.get('current_episode', 1))
+    is_event = s.get('show_type') == 'event'
 
-    # ── 메인 행: 항상 보임 ──────────────────────────────
-    c_info, c_ep, c_btn = st.columns([4, 2, 2])
-    c_info.markdown(
-        f"{CAT_EMOJI.get(cat, '📺')} **{s['name']}**  "
-        f"<span style='color:gray;font-size:0.85em'>"
-        f"{s.get('channel','?')} · {days} {air_time}</span>",
-        unsafe_allow_html=True,
-    )
-    ep_input = c_ep.number_input(
-        '방영된 회차', min_value=1, value=ep_now,
-        key=f'ep_{sid}', label_visibility='collapsed',
-        help='방금 방영 끝난 회차 → 다음 회차 예측 자동 생성',
-    )
-    gen_btn = c_btn.button('예측 생성 ▶', key=f'gen_{sid}',
-                            type='primary', use_container_width=True)
+    with st.container(border=True):
+        # ── 헤더: 제목 + 카테고리 배지 ──────────────────
+        h_title, h_badge = st.columns([3, 1], vertical_alignment='center')
+        h_title.markdown(f"#### {CAT_EMOJI.get(cat, '📺')} {s['name']}")
+        h_badge.badge(CAT_LABEL.get(cat, cat), color=CAT_COLOR.get(cat, 'gray'))
 
-    # ── 컨텍스트 + 설정 expander ───────────────────────
-    with st.expander('컨텍스트 · 설정', expanded=False):
-
-        st.caption('📝 컨텍스트 입력 — 입력할수록 예측이 정확해집니다')
-        summary = st.text_area(
-            '이번 회차 핵심 내용',
-            key=f'summary_{sid}',
-            placeholder=(
-                '예) 이번주 1위는 aespa, NewJeans가 컴백 무대 첫 선 보임. '
-                '특별 콜라보 무대 있었음.'
-            ),
-            height=80,
-        )
-        trailer = st.text_area(
-            '다음 회차 예고/힌트 (선택)',
-            key=f'trailer_{sid}',
-            placeholder='예) 다음주 BTS 지민 솔로 컴백 예고, 깜짝 게스트 예정',
-            height=60,
-        )
+        # ── 메타 정보 라인 ──────────────────────────────
+        meta = s.get('channel') or '방송사 미지정'
+        if is_event:
+            meta += ' · 일회성'
+        elif days or air_time:
+            meta += f" · {days} {air_time}".rstrip()
+        st.caption(f"📡 {meta}　|　🔢 현재 {ep_now}회 추적 중")
 
         st.divider()
-        st.caption('⚙️ 설정')
-        ec1, ec2 = st.columns(2)
-        new_days = ec1.multiselect('방영 요일', DAYS_OPTIONS,
-                                    default=s.get('air_days') or [], key=f'days_{sid}')
-        new_time = ec2.text_input('방영 시각 (HH:MM)', value=air_time, key=f'time_{sid}')
-        new_cat = ec1.selectbox('카테고리', CATEGORIES,
-                                 index=CATEGORIES.index(cat) if cat in CATEGORIES else 3,
-                                 key=f'cat_{sid}')
-        new_notes = st.text_area(
-            '프로그램 형식 설명 (AI에 전달)',
-            value=s.get('notes') or '',
-            key=f'notes_{sid}',
-            placeholder=(
-                '예) 같은 기수의 남녀 솔로들이 만나는 형식. 하트시그널·다른 프로그램 이름 사용 금지.\n'
-                '예) 요리사 두 명이 대결하는 형식. 이번 회차 대결자는 컨텍스트에서 파악.'
-            ),
-            height=70,
-        )
-        sc1, sc2 = st.columns(2)
-        if sc1.button('설정 저장', key=f'save_{sid}'):
-            db.table('shows').update({
-                'air_days': new_days,
-                'air_time_kst': new_time,
-                'category': new_cat,
-                'notes': new_notes,
-            }).eq('id', sid).execute()
-            st.toast('저장됨')
-            st.rerun()
-        if sc2.button('종영 처리', key=f'end_{sid}'):
-            db.table('shows').update({'ended': True}).eq('id', sid).execute()
-            st.toast(f'{s["name"]} 종영 처리됨')
-            st.rerun()
 
-    # 버튼 처리 (expander 밖에서)
+        # ── 액션: 회차 입력 + 생성 버튼 ─────────────────
+        a_ep, a_btn = st.columns([1, 1], vertical_alignment='bottom')
+        ep_input = a_ep.number_input(
+            '방영된 회차', min_value=1, value=ep_now,
+            key=f'ep_{sid}',
+            help='방금 방영 끝난 회차 → 다음 회차 예측 자동 생성',
+        )
+        gen_btn = a_btn.button('예측 생성 ▶', key=f'gen_{sid}',
+                                type='primary', use_container_width=True)
+
+        # ── 컨텍스트 + 설정 expander ────────────────────
+        with st.expander('컨텍스트 · 설정', expanded=False):
+            st.caption('📝 컨텍스트 입력 — 입력할수록 예측이 정확해집니다')
+            st.text_area(
+                '이번 회차 핵심 내용',
+                key=f'summary_{sid}',
+                placeholder=(
+                    '예) 이번주 1위는 aespa, NewJeans가 컴백 무대 첫 선 보임. '
+                    '특별 콜라보 무대 있었음.'
+                ),
+                height=80,
+            )
+            st.text_area(
+                '다음 회차 예고/힌트 (선택)',
+                key=f'trailer_{sid}',
+                placeholder='예) 다음주 BTS 지민 솔로 컴백 예고, 깜짝 게스트 예정',
+                height=60,
+            )
+
+            st.divider()
+            st.caption('⚙️ 설정')
+            ec1, ec2 = st.columns(2)
+            new_days = ec1.multiselect('방영 요일', DAYS_OPTIONS,
+                                        default=s.get('air_days') or [], key=f'days_{sid}')
+            new_time = ec2.text_input('방영 시각 (HH:MM)', value=air_time, key=f'time_{sid}')
+            new_cat = ec1.selectbox('카테고리', CATEGORIES,
+                                     index=CATEGORIES.index(cat) if cat in CATEGORIES else 3,
+                                     format_func=lambda c: CAT_LABEL.get(c, c),
+                                     key=f'cat_{sid}')
+            new_notes = st.text_area(
+                '프로그램 형식 설명 (AI에 전달)',
+                value=s.get('notes') or '',
+                key=f'notes_{sid}',
+                placeholder=(
+                    '예) 같은 기수의 남녀 솔로들이 만나는 형식. 하트시그널·다른 프로그램 이름 사용 금지.\n'
+                    '예) 요리사 두 명이 대결하는 형식. 이번 회차 대결자는 컨텍스트에서 파악.'
+                ),
+                height=70,
+            )
+            sc1, sc2 = st.columns(2)
+            if sc1.button('설정 저장', key=f'save_{sid}', use_container_width=True):
+                db.table('shows').update({
+                    'air_days': new_days,
+                    'air_time_kst': new_time,
+                    'category': new_cat,
+                    'notes': new_notes,
+                }).eq('id', sid).execute()
+                st.toast('저장됨')
+                st.rerun()
+            if sc2.button('종영 처리', key=f'end_{sid}', use_container_width=True):
+                db.table('shows').update({'ended': True}).eq('id', sid).execute()
+                st.toast(f'{s["name"]} 종영 처리됨')
+                st.rerun()
+
+    # 버튼 처리 (카드 컨테이너 밖에서 spinner 표시)
     if gen_btn:
         extra = {
             'episode_summary': st.session_state.get(f'summary_{sid}', ''),
@@ -134,23 +149,31 @@ def _show_card(db, s: dict):
             msg = _run_generate(db, s, ep_input, extra)
         st.toast(msg)
 
-    st.divider()
-
 
 def render(db):
-    st.subheader('추적 프로그램')
     shows = (db.table('shows').select('*').eq('ended', False)
-             .order('name').execute().data or [])
+             .order('category').order('name').execute().data or [])
+
+    head_l, head_r = st.columns([3, 1], vertical_alignment='center')
+    head_l.subheader(f'추적 프로그램 · {len(shows)}개')
 
     if not shows:
         st.info('추적 중인 프로그램 없음 — 아래에서 추가하세요')
     else:
-        h1, h2, h3 = st.columns([4, 2, 2])
-        h2.caption('방영된 회차')
-        h3.caption('수동 예측 생성')
-        st.divider()
-        for s in shows:
-            _show_card(db, s)
+        # 카테고리 필터
+        cats_present = sorted({s.get('category', 'variety') for s in shows})
+        filt = head_r.selectbox(
+            '카테고리 필터', ['전체'] + cats_present,
+            format_func=lambda c: c if c == '전체' else f'{CAT_EMOJI.get(c, "📺")} {CAT_LABEL.get(c, c)}',
+            label_visibility='collapsed', key='cat_filter',
+        )
+        visible = [s for s in shows if filt == '전체' or s.get('category') == filt]
+
+        # 2열 카드 그리드
+        cols = st.columns(2, gap='medium')
+        for i, s in enumerate(visible):
+            with cols[i % 2]:
+                _show_card(db, s)
 
     with st.expander('＋ 새 프로그램 추가'):
         c1, c2 = st.columns(2)
