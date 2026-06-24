@@ -16,5 +16,6 @@ INSERT INTO shows (name, channel, category, show_type, ended, source) VALUES
 ('연애전쟁', '', 'romance', 'regular', false, 'manual'),
 ('합숙맞선', '', 'romance', 'regular', false, 'manual'),
 ('모솔연애', '', 'romance', 'regular', false, 'manual'),
-('나는 SOLO, 그 후 사랑은 계속된다', 'ENA', 'romance', 'regular', false, 'manual')
+('나는 SOLO, 그 후 사랑은 계속된다', 'ENA', 'romance', 'regular', false, 'manual'),
+('웨이브 스탠바이미', 'Wavve', 'romance', 'regular', false, 'manual')
 ON CONFLICT (name) DO NOTHING;
