@@ -242,8 +242,9 @@ def tab_discovery():
     if not pending:
         st.info('검토 대기 중인 프로그램 없음')
         approved = [d for d in discovered if d.get('status') == 'approved']
-        if approved:
-            st.caption(f'승인됨: {len(approved)}개 / 거부됨: {len(d for d in discovered if d.get("status")=="rejected")}개')
+        rejected = [d for d in discovered if d.get('status') == 'rejected']
+        if approved or rejected:
+            st.caption(f'승인됨: {len(approved)}개 / 거부됨: {len(rejected)}개')
         return
 
     st.caption(f'검토 대기: {len(pending)}개')
