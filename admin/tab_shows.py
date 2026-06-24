@@ -1,4 +1,4 @@
-"""Tab 1: 프로그램 관리 — 예측 생성 버튼이 항상 보이는 카드 레이아웃"""
+"""Tab 1: 프로그램 관리 — 예측 생성 버튼 + 컨텍스트 입력"""
 from datetime import datetime
 from zoneinfo import ZoneInfo
 import streamlit as st
@@ -30,15 +30,17 @@ def _upsert_episode(db, show: dict, episode_num: int) -> str | None:
     return result.data[0]['id'] if result.data else None
 
 
-def _run_generate(db, show: dict, episode_num: int) -> str:
+def _run_generate(db, show: dict, episode_num: int, extra_context: dict) -> str:
     episode_id = _upsert_episode(db, show, episode_num)
     if not episode_id:
         return '에피소드 DB 등록 실패'
     try:
         from ai_engine.prediction_generator import generate_episode_predictions
-        preds = generate_episode_predictions(episode_id)
+        preds = generate_episode_predictions(episode_id, extra_context=extra_context)
         if preds:
-            db.table('shows').update({'current_episode': episode_num + 1}).eq('id', show['id']).execute()
+            db.table('shows').update(
+                {'current_episode': episode_num + 1}
+            ).eq('id', show['id']).execute()
             return f'✅ {len(preds)}개 예측 생성 → [예측] 탭에서 검토 후 게시'
         return '예측 0개 생성 (필터 탈락 또는 AI 응답 파싱 실패)'
     except Exception as e:
@@ -46,47 +48,57 @@ def _run_generate(db, show: dict, episode_num: int) -> str:
 
 
 def _show_card(db, s: dict):
-    """프로그램 1개 카드: 메타 정보 + 즉시 예측 생성 버튼 + 설정 expander"""
     sid = s['id']
     cat = s.get('category', 'variety')
     days = ''.join(DAY_KR.get(d, d) for d in (s.get('air_days') or []))
     air_time = s.get('air_time_kst', '')
     ep_now = int(s.get('current_episode', 1))
 
-    # ── 메인 행: 항상 보임 ───────────────────────────
+    # ── 메인 행: 항상 보임 ──────────────────────────────
     c_info, c_ep, c_btn = st.columns([4, 2, 2])
+    c_info.markdown(
+        f"{CAT_EMOJI.get(cat, '📺')} **{s['name']}**  "
+        f"<span style='color:gray;font-size:0.85em'>"
+        f"{s.get('channel','?')} · {days} {air_time}</span>",
+        unsafe_allow_html=True,
+    )
+    ep_input = c_ep.number_input(
+        '방영된 회차', min_value=1, value=ep_now,
+        key=f'ep_{sid}', label_visibility='collapsed',
+        help='방금 방영된 회차 번호',
+    )
+    gen_btn = c_btn.button('예측 생성 ▶', key=f'gen_{sid}',
+                            type='primary', use_container_width=True)
 
-    with c_info:
-        st.markdown(
-            f"{CAT_EMOJI.get(cat, '📺')} **{s['name']}**  "
-            f"<span style='color:gray;font-size:0.85em'>{s.get('channel','?')} · {days} {air_time}</span>",
-            unsafe_allow_html=True,
+    # ── 컨텍스트 + 설정 expander ───────────────────────
+    with st.expander('컨텍스트 · 설정', expanded=False):
+
+        st.caption('📝 컨텍스트 입력 — 입력할수록 예측이 정확해집니다')
+        summary = st.text_area(
+            '이번 회차 핵심 내용',
+            key=f'summary_{sid}',
+            placeholder=(
+                '예) 이번주 1위는 aespa, NewJeans가 컴백 무대 첫 선 보임. '
+                '특별 콜라보 무대 있었음.'
+            ),
+            height=80,
+        )
+        trailer = st.text_area(
+            '다음 회차 예고/힌트 (선택)',
+            key=f'trailer_{sid}',
+            placeholder='예) 다음주 BTS 지민 솔로 컴백 예고, 깜짝 게스트 예정',
+            height=60,
         )
 
-    ep_input = c_ep.number_input(
-        '방영된 회차',
-        min_value=1, value=ep_now,
-        key=f'ep_{sid}',
-        label_visibility='collapsed',
-        help='방금 방영된 회차 번호 입력 후 예측 생성',
-    )
-
-    if c_btn.button('예측 생성 ▶', key=f'gen_{sid}', type='primary', use_container_width=True):
-        with st.spinner(f'{s["name"]} {ep_input}회 예측 생성 중... (10~20초)'):
-            msg = _run_generate(db, s, ep_input)
-        st.toast(msg)
-
-    # ── 설정 expander: 접혀 있음 ─────────────────────
-    with st.expander('설정', expanded=False):
+        st.divider()
+        st.caption('⚙️ 설정')
         ec1, ec2 = st.columns(2)
         new_days = ec1.multiselect('방영 요일', DAYS_OPTIONS,
                                     default=s.get('air_days') or [], key=f'days_{sid}')
-        new_time = ec2.text_input('방영 시각 (HH:MM)',
-                                   value=air_time, key=f'time_{sid}')
+        new_time = ec2.text_input('방영 시각 (HH:MM)', value=air_time, key=f'time_{sid}')
         new_cat = ec1.selectbox('카테고리', CATEGORIES,
                                  index=CATEGORIES.index(cat) if cat in CATEGORIES else 3,
                                  key=f'cat_{sid}')
-
         sc1, sc2 = st.columns(2)
         if sc1.button('설정 저장', key=f'save_{sid}'):
             db.table('shows').update({
@@ -101,19 +113,27 @@ def _show_card(db, s: dict):
             st.toast(f'{s["name"]} 종영 처리됨')
             st.rerun()
 
+    # 버튼 처리 (expander 밖에서)
+    if gen_btn:
+        extra = {
+            'episode_summary': st.session_state.get(f'summary_{sid}', ''),
+            'trailer_hints': st.session_state.get(f'trailer_{sid}', ''),
+        }
+        with st.spinner(f'{s["name"]} {ep_input}회 예측 생성 중... (10~20초)'):
+            msg = _run_generate(db, s, ep_input, extra)
+        st.toast(msg)
+
     st.divider()
 
 
 def render(db):
     st.subheader('추적 프로그램')
-
     shows = (db.table('shows').select('*').eq('ended', False)
              .order('name').execute().data or [])
 
     if not shows:
         st.info('추적 중인 프로그램 없음 — 아래에서 추가하세요')
     else:
-        # 컬럼 헤더
         h1, h2, h3 = st.columns([4, 2, 2])
         h2.caption('방영된 회차')
         h3.caption('수동 예측 생성')
@@ -121,7 +141,6 @@ def render(db):
         for s in shows:
             _show_card(db, s)
 
-    # ── 새 프로그램 추가 ───────────────────────────────
     with st.expander('＋ 새 프로그램 추가'):
         c1, c2 = st.columns(2)
         new_name = c1.text_input('프로그램명', key='new_name')

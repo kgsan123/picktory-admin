@@ -159,10 +159,10 @@ def generate_predictions(
     raise RuntimeError(f'예측 생성 실패: {last_error}')
 
 
-def generate_episode_predictions(episode_id: str) -> list[dict]:
+def generate_episode_predictions(episode_id: str, extra_context: dict | None = None) -> list[dict]:
     """
     DB에서 에피소드 조회 → 예측 생성 → DB 저장.
-    데이터 수집은 선택적 — 실패해도 빈 context로 진행.
+    extra_context: 관리자가 직접 입력한 이번 회차 요약/예고 (우선 적용).
     Returns saved predictions list.
     """
     from db import get_client
@@ -175,10 +175,10 @@ def generate_episode_predictions(episode_id: str) -> list[dict]:
 
     ep_num = ep.get('episode_number') or 1
 
-    # DB에 수집된 데이터만 사용 (외부 HTTP 요청 없음)
+    # 관리자 입력 컨텍스트 우선, 없으면 DB 수집 데이터 사용
     context: dict = {
-        'episode_summary': '',
-        'trailer_hints': '',
+        'episode_summary': (extra_context or {}).get('episode_summary') or ep.get('news_summary') or '',
+        'trailer_hints': (extra_context or {}).get('trailer_hints') or '',
         'news_summary': ep.get('news_summary') or '',
         'reaction_score': ep.get('reaction_score') or 0,
         'top_clip_views': 0,
