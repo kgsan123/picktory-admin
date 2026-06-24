@@ -283,6 +283,7 @@ def generate_episode_predictions(episode_id: str, extra_context: dict | None = N
             'options': p.get('options', []),
             'difficulty': p.get('difficulty', 3),
             'fun_score': p.get('fun_score', 3),
+            'verification_method': p.get('verification_method', ''),
             'prompt_version': p.get('prompt_version', PROMPT_VERSION),
             'status': 'draft',
             'verdict': 'pending',

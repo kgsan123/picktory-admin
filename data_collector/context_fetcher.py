@@ -157,8 +157,8 @@ def _google_rss(query: str, ctx: EpisodeContext, label: str,
         results = []
         keywords = [w for w in re.split(r'\s+', program_name) if len(w) >= 2] if program_name else []
         excl = [e.lower() for e in (exclude_terms or [])]
-        # 방영 전 예고 키워드 — 날짜 필터 있을 때 추가 제외
-        preview_kw = ['예고', '예상', '미리보기', '스포'] if after_dt else []
+        # 스포일러만 제외 — 예고/예상 기사는 방영 후에도 귀추 주목 컨텍스트로 활용
+        preview_kw = ['스포'] if after_dt else []
 
         for entry in feed.entries[:10]:
             # 날짜 필터: 방영 시각 이후 발행된 글만
