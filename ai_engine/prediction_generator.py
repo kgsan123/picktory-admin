@@ -312,6 +312,9 @@ def generate_episode_predictions(episode_id: str, extra_context: dict | None = N
 
     # 우선순위: 관리자 입력 > 자동 수집(Google News + 더쿠 + DC) > DB 기존 데이터
     operator_summary = (extra_context or {}).get('episode_summary', '').strip()
+    context_sufficient = True  # 운영자 입력이 있으면 무조건 통과
+    chart_text = ''
+    auto_trailer = ''
     if operator_summary:
         auto_text = operator_summary
     else:
@@ -320,7 +323,6 @@ def generate_episode_predictions(episode_id: str, extra_context: dict | None = N
             category = ep.get('category', 'drama')
             # aired_at 파싱 (KST datetime)
             from datetime import datetime as _dt
-            from zoneinfo import ZoneInfo as _ZI
             aired_at_raw = ep.get('aired_at')
             aired_at_dt = None
             if aired_at_raw:
@@ -333,6 +335,7 @@ def generate_episode_predictions(episode_id: str, extra_context: dict | None = N
                 program_name, ep_num, category=category,
                 show_notes=show_notes, aired_at=aired_at_dt,
             )
+            context_sufficient = ep_ctx.has_sufficient_signal()
             auto_text = ep_ctx.to_prompt_text() or ep.get('news_summary') or ''
             chart_text = ep_ctx.to_chart_text()
             # 자동 수집 예고를 operator 미입력시 fallback으로 사용
@@ -348,6 +351,19 @@ def generate_episode_predictions(episode_id: str, extra_context: dict | None = N
             auto_text = ep.get('news_summary') or ''
             chart_text = ''
             auto_trailer = ''
+            context_sufficient = bool(auto_text)  # DB 기존 데이터라도 있으면 시도
+
+    # ── rank8: 빈약 컨텍스트 게이트 ──────────────────────────────
+    # 운영자 입력도 없고 자동 수집 신호도 부족하면 → 환각만 나올 생성을 건너뜀
+    if not context_sufficient:
+        log.warning(f'컨텍스트 부족 → 생성 건너뜀 (운영자 입력 필요): {program_name} {ep_num}회')
+        try:
+            client.table('episodes').update(
+                {'pipeline_status': 'context_insufficient'}
+            ).eq('id', episode_id).execute()
+        except Exception:
+            pass
+        return []
 
     # trailer_hints: 운영자 직접 입력 > 자동 수집 예고
     trailer_hints = (extra_context or {}).get('trailer_hints', '').strip()

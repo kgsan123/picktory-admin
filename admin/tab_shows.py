@@ -46,6 +46,14 @@ def _run_generate(db, show: dict, episode_num: int, extra_context: dict) -> str:
                 {'current_episode': episode_num + 1}
             ).eq('id', show['id']).execute()
             return f'✅ {len(preds)}개 예측 생성 → [예측] 탭에서 검토 후 게시'
+        # 컨텍스트 부족으로 건너뛴 경우 안내
+        try:
+            ep_row = db.table('episodes').select('pipeline_status').eq('id', episode_id).single().execute().data
+            if ep_row and ep_row.get('pipeline_status') == 'context_insufficient':
+                return ('⚠️ 수집된 정보가 부족해 생성을 건너뛰었습니다. '
+                        '아래 [컨텍스트·설정]에서 "이번 회차 핵심 내용"을 직접 입력 후 다시 시도하세요.')
+        except Exception:
+            pass
         return '예측 0개 생성 (필터 탈락 또는 AI 응답 파싱 실패)'
     except Exception as e:
         return f'❌ 오류: {e}'

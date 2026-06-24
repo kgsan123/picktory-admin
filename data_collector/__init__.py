@@ -50,15 +50,17 @@ def collect_all(episode_id: str) -> dict:
         return {'error': str(e)}
 
     program_name: str = episode.get('program_name', '')
+    episode_num = episode.get('episode_number')
+    category = episode.get('category', 'drama')
     aired_at_raw: str = episode.get('aired_at') or episode.get('created_at')
     aired_at = datetime.fromisoformat(aired_at_raw).astimezone(KST)
 
     collected: dict = {'episode_id': episode_id}
 
     for label, fn, fn_args in [
-        ('ratings',   fetch_ratings,  (program_name, aired_at)),
+        ('ratings',   fetch_ratings,  (program_name, aired_at, episode_num)),
         ('news',      fetch_news,     (program_name, aired_at)),
-        ('reactions', fetch_reactions,(program_name, aired_at)),
+        ('reactions', fetch_reactions,(program_name, aired_at, category)),
         ('ott_rank',  fetch_ott_rank, (program_name,)),
     ]:
         step_t = time.monotonic()

@@ -95,10 +95,22 @@ def step_verify(episode_id: str, show: dict):
 
 def step_generate(episode_id: str, show: dict):
     from ai_engine.prediction_generator import generate_episode_predictions
-    with_retry(
+    preds = with_retry(
         generate_episode_predictions, episode_id,
         step='generate', program=show['name'], ep_num=show.get('current_episode', 0)
     )
+    # 컨텍스트 부족으로 건너뛴 경우 운영자에게 알림 (1회)
+    if preds == []:
+        try:
+            from db import get_client
+            ep = get_client().table('episodes').select('pipeline_status').eq('id', episode_id).single().execute().data
+            if ep and ep.get('pipeline_status') == 'context_insufficient':
+                send_discord(
+                    f"⚠️ {show['name']} EP{show.get('current_episode', 0)}: "
+                    f"수집 정보 부족으로 예측 생성 건너뜀 — 어드민에서 컨텍스트 직접 입력 필요"
+                )
+        except Exception:
+            pass
 
 
 def run_pipeline(show: dict):

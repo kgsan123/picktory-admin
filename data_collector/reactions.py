@@ -44,15 +44,25 @@ def _blog_score(program_name: str, aired_at: datetime) -> float:
         return 0.0
 
 
-def _dc_score(program_name: str, aired_at: datetime) -> float:
-    """DC인사이드 드라마 갤러리 24h 게시물 수 → 0.0–5.0"""
+# 카테고리별 DC인사이드 갤러리 라우팅 (없으면 drama 폴백)
+_DC_GALLERY = {
+    'drama': 'drama',
+    'music': 'kpop',
+    'romance': 'drama',
+    'survival': 'drama',
+    'variety': 'comedy_new1',
+}
+
+
+def _dc_score(program_name: str, aired_at: datetime, gallery: str = 'drama') -> float:
+    """DC인사이드 갤러리 24h 게시물 수 → 0.0–5.0"""
     cutoff = aired_at - timedelta(hours=2)
     deadline = aired_at + timedelta(hours=24)
     count = 0
     try:
         time.sleep(2)
         params = {
-            'id': 'drama',
+            'id': gallery,
             'list_num': 50,
             's_type': 'search_subject_memo',
             's_keyword': program_name,
@@ -82,13 +92,16 @@ def _dc_score(program_name: str, aired_at: datetime) -> float:
     return min(5.0, count / 4)
 
 
-def fetch_reactions(program_name: str, aired_at: datetime) -> dict:
+def fetch_reactions(program_name: str, aired_at: datetime,
+                    category: str = 'drama') -> dict:
     """
     Returns:
         {'reaction_score': float, 'collected_at': datetime, 'source': str}
+    category: DC 갤러리 라우팅에 사용 (music→kpop 등).
     """
+    gallery = _DC_GALLERY.get(category, 'drama')
     blog = _blog_score(program_name, aired_at)
-    dc = _dc_score(program_name, aired_at)
+    dc = _dc_score(program_name, aired_at, gallery)
     score = round(blog + dc, 2)
 
     return {
@@ -96,7 +109,7 @@ def fetch_reactions(program_name: str, aired_at: datetime) -> dict:
         'blog_score': round(blog, 2),
         'dc_score': round(dc, 2),
         'collected_at': datetime.now(KST),
-        'source': 'naver_blog+dcinside',
+        'source': f'naver_blog+dc:{gallery}',
     }
 
 
@@ -104,7 +117,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--program', required=True)
     parser.add_argument('--aired', required=True)
+    parser.add_argument('--category', default='drama')
     args = parser.parse_args()
     aired_at = datetime.fromisoformat(args.aired)
-    result = fetch_reactions(args.program, aired_at)
+    result = fetch_reactions(args.program, aired_at, args.category)
     print(json.dumps(result, default=str, ensure_ascii=False, indent=2))

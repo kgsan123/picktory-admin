@@ -1,5 +1,10 @@
 # DECISIONS.md
 
+## 2026-06-25 트랙 C(일부): 컨텍스트 게이트 + 수집 정밀화
+**Decision:** (rank8) 운영자 입력도 없고 자동 수집 신호도 부족(news+community<2 AND 줄거리 없음)하면 생성을 건너뛰고 pipeline_status='context_insufficient' + 어드민/Discord 알림. (rank12) fetch_ratings에 episode_num 추가해 해당 회차 언급 기사 시청률 우선, fetch_reactions에 category 추가해 DC 갤러리 라우팅(music→kpop, 그 외→drama).
+**Reason:** 컨텍스트 빈약 시 환각 예측만 나오고 Groq 토큰만 소모. 회차 무관 시청률/항상 drama 갤러리는 부정확.
+**Impact:** 빈약 회차는 운영자가 컨텍스트 직접 입력하면 통과. reaction_score 공식(blog+dc, 0-10)은 불변, dc_score의 출처 갤러리만 카테고리별로 달라짐. rank9(grounding 필터)·rank10(roster)은 라이브 테스트 후로 보류(과탈락 위험).
+
 ## 2026-06-25 예측 품질 종합 개선 (멀티에이전트 분석 기반)
 **Decision:** 데이터 수집/생성/검증 3단계 개선. (1) 나무위키 회차 줄거리를 컨텍스트 최상단 "사실 앵커"로 통합해 환각 차단. (2) 검증 루프 재구성 — 예측에 target_episode_number/program_name 컬럼 추가, 검증은 "방금 방영된 회차 N을 대상으로 한(target=N) 예측"을 N의 fresh 데이터로 판정. (3) verifier_v2 — 선택지(options) 전달 + correct_option_id(실제 일어난 선택지) 반환, max_tokens 4096, _reconcile로 누락/환각 id 처리.
 **Reason:** 기존 검증기가 결과-전 news_summary로 판정하고 선택지를 안 넘겨 대부분 pending. 예측은 N회 episode_id에 저장되나 내용은 N+1 관련이라 검증 lookup이 어긋남.
