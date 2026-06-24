@@ -108,7 +108,18 @@ def generate_predictions(
         top_clip_views=f"{context.get('top_clip_views', 0):,}",
     )
 
-    client = Groq(api_key=os.environ.get('GROQ_API_KEY'))
+    api_key = os.environ.get('GROQ_API_KEY', '')
+    if not api_key:
+        try:
+            import streamlit as st
+            api_key = st.secrets.get('GROQ_API_KEY', '')
+        except Exception:
+            pass
+    if not api_key:
+        raise RuntimeError('GROQ_API_KEY가 설정되지 않았습니다')
+
+    client = Groq(api_key=api_key)
+    last_error = ''
 
     for attempt in range(2):
         temp = temperature + (0.2 if attempt > 0 else 0)
@@ -125,7 +136,8 @@ def generate_predictions(
             raw = resp.choices[0].message.content
             predictions = _parse_predictions(raw)
             if predictions is None:
-                log.warning(f"JSON 파싱 실패 (시도 {attempt+1})")
+                last_error = f'JSON 파싱 실패 (시도 {attempt+1})'
+                log.warning(last_error)
                 time.sleep(2)
                 continue
 
@@ -135,15 +147,16 @@ def generate_predictions(
                     p['prompt_version'] = PROMPT_VERSION
                 return filtered
 
-            log.info(f"필터 후 {len(filtered)}개 — 최소 3개 미달, 재시도")
+            last_error = f'필터 후 {len(filtered)}개 (최소 3개 필요)'
+            log.info(last_error)
             time.sleep(2)
 
         except Exception as e:
-            log.warning(f"Groq API 시도 {attempt+1} 실패: {e}")
+            last_error = str(e)
+            log.warning(f'Groq API 시도 {attempt+1} 실패: {e}')
             time.sleep(3)
 
-    log.error("예측 생성 2회 실패")
-    return []
+    raise RuntimeError(f'예측 생성 실패: {last_error}')
 
 
 def generate_episode_predictions(episode_id: str) -> list[dict]:

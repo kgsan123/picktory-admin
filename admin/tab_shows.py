@@ -37,12 +37,12 @@ def _run_generate(db, show: dict, episode_num: int) -> str:
     try:
         from ai_engine.prediction_generator import generate_episode_predictions
         preds = generate_episode_predictions(episode_id)
+        if preds:
+            db.table('shows').update({'current_episode': episode_num + 1}).eq('id', show['id']).execute()
+            return f'✅ {len(preds)}개 예측 생성 → [예측] 탭에서 검토 후 게시'
+        return '예측 0개 생성 (필터 탈락 또는 AI 응답 파싱 실패)'
     except Exception as e:
-        return f'예측 생성 오류: {e}'
-    if preds:
-        db.table('shows').update({'current_episode': episode_num + 1}).eq('id', show['id']).execute()
-        return f'✅ {len(preds)}개 예측 생성 → [예측] 탭에서 검토 후 게시'
-    return '예측 생성 실패 — GROQ_API_KEY 설정 확인'
+        return f'❌ 오류: {e}'
 
 
 def _show_card(db, s: dict):
