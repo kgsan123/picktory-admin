@@ -23,7 +23,7 @@ KST = ZoneInfo('Asia/Seoul')
 
 PROMPT_DIR = Path(__file__).parent / 'prompts'
 MODEL = 'llama-3.3-70b-versatile'
-PROMPT_VERSION = 'v4'
+PROMPT_VERSION = 'v5'
 
 
 def _load_prompt(category: str) -> tuple[str, str]:
@@ -87,6 +87,11 @@ def _apply_filters(predictions: list[dict]) -> list[dict]:
             continue
         if not options or len(options) < 2:
             log.debug(f"필터 제거 (options 부족): {p.get('title')}")
+            continue
+        # YES/NO 형식 거부 (options가 정확히 YES/NO 두 개인 경우)
+        opt_ids = {o.get('id', '').upper() for o in options}
+        if opt_ids == {'YES', 'NO'}:
+            log.debug(f"필터 제거 (YES/NO 형식): {p.get('title')}")
             continue
         # 플레이스홀더 금지
         placeholder = any(t in content for t in ['A 출연자', 'B 출연자', 'A 아이돌', 'B 아이돌', 'A팀', 'B팀', '주요 커플'])
@@ -158,7 +163,7 @@ def generate_predictions(
                     {'role': 'user', 'content': user_msg},
                 ],
                 temperature=min(temp, 1.0),
-                max_tokens=2048,
+                max_tokens=4096,
             )
             raw = resp.choices[0].message.content
             predictions = _parse_predictions(raw)
