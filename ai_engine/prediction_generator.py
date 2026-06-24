@@ -63,7 +63,8 @@ def _parse_predictions(text: str) -> list[dict] | None:
         return None
 
 
-_VAGUE_VERIFY = ['방영 후 확인', '해당 회차에서 확인', '추후 확인', '나중에 확인', '확인 가능']
+_VAGUE_VERIFY = ['방영 후 확인', '해당 회차에서 확인', '추후 확인', '나중에 확인']
+# "확인 가능" 제거 — "방송 종료 즉시 확인 가능" 같은 좋은 문구까지 걸러내는 문제 있음
 
 def _apply_filters(predictions: list[dict]) -> list[dict]:
     """품질 필터 적용. 통과한 예측만 반환."""
