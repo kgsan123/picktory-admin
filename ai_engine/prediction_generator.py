@@ -169,25 +169,36 @@ def _apply_filters(predictions: list[dict]) -> list[dict]:
     return kept
 
 
-# 같은 이벤트 유형을 가리키는 핵심 명사 (이벤트 다양성 확보용)
-_EVENT_KEYS = ['탈락', '1위', '우승', '게스트', '벌칙', '커플', '최종 선택',
-               '첫인상', '데이트', '고백', '미션', '컴백', '대결']
+def _content_tokens(content: str) -> set:
+    """content를 정규화해 토큰 집합으로. 조사·짧은 토큰 제거."""
+    cleaned = re.sub(r'[^가-힣a-zA-Z0-9\s]', ' ', content)
+    return {t for t in cleaned.split() if len(t) >= 2}
 
-def _dedupe(predictions: list[dict]) -> list[dict]:
-    """같은 이벤트를 다룬 예측이 2개를 넘으면 제거 — 6개가 서로 다른 이벤트가 되도록."""
-    result = []
-    event_count: dict[str, int] = {}
+
+def _dedupe(predictions: list[dict], threshold: float = 0.7) -> list[dict]:
+    """거의 동일한 질문만 제거 (Jaccard 유사도). 서로 다른 각도의 예측은 유지.
+
+    음악의 '1위' 처럼 같은 키워드를 공유해도 질문이 다르면(이번 회차 1위 vs 컴백 1위
+    vs A·B 대결) 보존. 사실상 같은 질문이 중복될 때만 제거.
+    """
+    kept: list[dict] = []
+    kept_tokens: list[set] = []
     for p in predictions:
-        content = p.get('content', '')
-        # 이 예측이 어떤 이벤트를 다루는지 추정
-        key = next((k for k in _EVENT_KEYS if k in content), None)
-        if key:
-            if event_count.get(key, 0) >= 2:
-                log.debug(f"중복 제거 (이벤트 '{key}' 3번째): {p.get('title')}")
+        toks = _content_tokens(p.get('content', ''))
+        is_dup = False
+        for prev in kept_tokens:
+            if not toks or not prev:
                 continue
-            event_count[key] = event_count.get(key, 0) + 1
-        result.append(p)
-    return result
+            jaccard = len(toks & prev) / len(toks | prev)
+            if jaccard >= threshold:
+                is_dup = True
+                break
+        if is_dup:
+            log.debug(f"중복 제거 (유사 질문): {p.get('title')}")
+            continue
+        kept.append(p)
+        kept_tokens.append(toks)
+    return kept
 
 
 def generate_predictions(
