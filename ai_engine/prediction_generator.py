@@ -23,7 +23,7 @@ KST = ZoneInfo('Asia/Seoul')
 
 PROMPT_DIR = Path(__file__).parent / 'prompts'
 MODEL = 'llama-3.3-70b-versatile'
-PROMPT_VERSION = 'v1'
+PROMPT_VERSION = 'v2'
 
 
 def _load_prompt(category: str) -> tuple[str, str]:
