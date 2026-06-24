@@ -64,7 +64,20 @@ def _parse_predictions(text: str) -> list[dict] | None:
 
 
 _VAGUE_VERIFY = ['방영 후 확인', '해당 회차에서 확인', '추후 확인', '나중에 확인']
-# "확인 가능" 제거 — "방송 종료 즉시 확인 가능" 같은 좋은 문구까지 걸러내는 문제 있음
+
+# 의미상 YES/NO와 동일한 이진 반의어 쌍
+_BINARY_PAIRS = [
+    {'진입', '미진입'}, {'성공', '실패'}, {'달성', '미달성'},
+    {'있음', '없음'}, {'맞다', '아니다'}, {'예', '아니오'},
+    {'남자', '여자'}, {'통과', '탈락'}, {'승', '패'},
+]
+
+# 선택지 텍스트에 들어있으면 안 되는 플레이스홀더
+_PLACEHOLDER_TERMS = [
+    'A 출연자', 'B 출연자', 'A 아이돌', 'B 아이돌',
+    'A팀', 'B팀', '주요 커플', '기타 아티스트', '기타 팀', '기타 출연자',
+]
+
 
 def _apply_filters(predictions: list[dict]) -> list[dict]:
     """품질 필터 적용. 통과한 예측만 반환."""
@@ -75,28 +88,37 @@ def _apply_filters(predictions: list[dict]) -> list[dict]:
         verify = p.get('verification_method', '').strip()
         options = p.get('options', [])
         content = p.get('content', '')
+        opt_texts = {o.get('text', '').strip() for o in options}
 
         if fun < 3:
             log.debug(f"필터 제거 (fun_score={fun}): {p.get('title')}")
             continue
-        # verification_method 최소 20자 + 모호한 표현 금지
+
         if not verify or len(verify) < 20:
             log.debug(f"필터 제거 (verification 너무 짧음): {p.get('title')}")
             continue
         if any(v in verify for v in _VAGUE_VERIFY):
             log.debug(f"필터 제거 (verification 모호): {p.get('title')}")
             continue
-        if not options or len(options) < 2:
-            log.debug(f"필터 제거 (options 부족): {p.get('title')}")
+
+        if not options or len(options) < 3:
+            log.debug(f"필터 제거 (선택지 2개 이하): {p.get('title')}")
             continue
-        # YES/NO 형식 거부 (options가 정확히 YES/NO 두 개인 경우)
+
+        # YES/NO id 형식 거부
         opt_ids = {o.get('id', '').upper() for o in options}
         if opt_ids == {'YES', 'NO'}:
-            log.debug(f"필터 제거 (YES/NO 형식): {p.get('title')}")
+            log.debug(f"필터 제거 (YES/NO id): {p.get('title')}")
             continue
-        # 플레이스홀더 금지
-        placeholder = any(t in content for t in ['A 출연자', 'B 출연자', 'A 아이돌', 'B 아이돌', 'A팀', 'B팀', '주요 커플'])
-        if placeholder:
+
+        # 의미상 이진 선택지 거부 (정확히 2개 텍스트이고 반의어 쌍인 경우)
+        if len(opt_texts) == 2 and any(opt_texts == pair for pair in _BINARY_PAIRS):
+            log.debug(f"필터 제거 (이진 반의어 선택지): {p.get('title')}")
+            continue
+
+        # 플레이스홀더 금지 (content + 선택지 텍스트 모두 검사)
+        all_text = content + ' ' + ' '.join(opt_texts)
+        if any(t in all_text for t in _PLACEHOLDER_TERMS):
             log.debug(f"필터 제거 (플레이스홀더): {p.get('title')}")
             continue
 
