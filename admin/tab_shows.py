@@ -65,7 +65,7 @@ def _show_card(db, s: dict):
     ep_input = c_ep.number_input(
         '방영된 회차', min_value=1, value=ep_now,
         key=f'ep_{sid}', label_visibility='collapsed',
-        help='방금 방영된 회차 번호',
+        help='방금 방영 끝난 회차 → 다음 회차 예측 자동 생성',
     )
     gen_btn = c_btn.button('예측 생성 ▶', key=f'gen_{sid}',
                             type='primary', use_container_width=True)
