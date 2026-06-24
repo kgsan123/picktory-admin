@@ -162,7 +162,7 @@ def generate_episode_predictions(episode_id: str) -> list[dict]:
 
     ep_num = ep.get('episode_number') or 1
 
-    # DB에 이미 수집된 데이터 우선 사용, 없으면 빈 값으로 진행
+    # DB에 수집된 데이터만 사용 (외부 HTTP 요청 없음)
     context: dict = {
         'episode_summary': '',
         'trailer_hints': '',
@@ -170,24 +170,6 @@ def generate_episode_predictions(episode_id: str) -> list[dict]:
         'reaction_score': ep.get('reaction_score') or 0,
         'top_clip_views': 0,
     }
-
-    # 선택적 데이터 보완 (실패해도 계속 진행)
-    try:
-        from data_collector.episode_summary import fetch_episode_summary
-        summary = fetch_episode_summary(ep.get('program_name', ''), ep_num)
-        context['episode_summary'] = summary.get('episode_summary', '')
-    except Exception:
-        pass
-
-    try:
-        from data_collector.youtube_clips import fetch_youtube_clips
-        aired_raw = ep.get('aired_at') or ep.get('created_at')
-        aired_at = datetime.fromisoformat(aired_raw).astimezone(KST)
-        yt = fetch_youtube_clips(ep.get('program_name', ''), ep_num, aired_at)
-        context['trailer_hints'] = yt.get('trailer_hints', '')
-        context['top_clip_views'] = yt.get('top_clip_views', 0)
-    except Exception:
-        pass
 
     predictions = generate_predictions(ep, context)
     if not predictions:
