@@ -23,7 +23,7 @@ KST = ZoneInfo('Asia/Seoul')
 
 PROMPT_DIR = Path(__file__).parent / 'prompts'
 MODEL = 'llama-3.3-70b-versatile'
-PROMPT_VERSION = 'v3'
+PROMPT_VERSION = 'v4'
 
 
 def _load_prompt(category: str) -> tuple[str, str]:
@@ -35,6 +35,20 @@ def _load_prompt(category: str) -> tuple[str, str]:
     system = parts[0].split('[SYSTEM]')[1].strip()
     user_template = parts[1].strip()
     return system, user_template
+
+
+_CJK_RE = re.compile(r'[一-鿿㐀-䶿　-〿＀-￯]')
+
+def _clean_prediction(p: dict) -> dict:
+    """생성된 예측에서 한자·일본어 제거."""
+    for field in ('title', 'content', 'verification_method'):
+        if field in p:
+            p[field] = _CJK_RE.sub('', p[field]).strip()
+    if 'options' in p:
+        for opt in p['options']:
+            if 'text' in opt:
+                opt['text'] = _CJK_RE.sub('', opt['text']).strip()
+    return p
 
 
 def _parse_predictions(text: str) -> list[dict] | None:
@@ -49,6 +63,8 @@ def _parse_predictions(text: str) -> list[dict] | None:
         return None
 
 
+_VAGUE_VERIFY = ['방영 후 확인', '해당 회차에서 확인', '추후 확인', '나중에 확인', '확인 가능']
+
 def _apply_filters(predictions: list[dict]) -> list[dict]:
     """품질 필터 적용. 통과한 예측만 반환."""
     kept = []
@@ -57,18 +73,27 @@ def _apply_filters(predictions: list[dict]) -> list[dict]:
         diff = p.get('difficulty', 3)
         verify = p.get('verification_method', '').strip()
         options = p.get('options', [])
+        content = p.get('content', '')
 
         if fun < 3:
             log.debug(f"필터 제거 (fun_score={fun}): {p.get('title')}")
             continue
-        if not verify or len(verify) < 10:
-            log.debug(f"필터 제거 (verification_method 없음): {p.get('title')}")
+        # verification_method 최소 20자 + 모호한 표현 금지
+        if not verify or len(verify) < 20:
+            log.debug(f"필터 제거 (verification 너무 짧음): {p.get('title')}")
+            continue
+        if any(v in verify for v in _VAGUE_VERIFY):
+            log.debug(f"필터 제거 (verification 모호): {p.get('title')}")
             continue
         if not options or len(options) < 2:
             log.debug(f"필터 제거 (options 부족): {p.get('title')}")
             continue
+        # 플레이스홀더 금지
+        placeholder = any(t in content for t in ['A 출연자', 'B 출연자', 'A 아이돌', 'B 아이돌', 'A팀', 'B팀', '주요 커플'])
+        if placeholder:
+            log.debug(f"필터 제거 (플레이스홀더): {p.get('title')}")
+            continue
 
-        # 너무 뻔한 예측 제거 (difficulty=1 + 한 옵션 확률 > 0.85)
         if diff == 1:
             max_odds = max(o.get('odds', 0) for o in options)
             if max_odds > 0.85:
@@ -143,6 +168,7 @@ def generate_predictions(
                 time.sleep(2)
                 continue
 
+            predictions = [_clean_prediction(p) for p in predictions]
             filtered = _apply_filters(predictions)[:6]  # 최대 6개
             if len(filtered) >= 4:  # 4개 이상이면 통과 (필터로 일부 탈락 감안)
                 for p in filtered:
