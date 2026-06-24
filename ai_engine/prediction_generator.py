@@ -174,12 +174,28 @@ def generate_episode_predictions(episode_id: str, extra_context: dict | None = N
         return []
 
     ep_num = ep.get('episode_number') or 1
+    program_name = ep.get('program_name', '')
 
-    # 관리자 입력 컨텍스트 우선, 없으면 DB 수집 데이터 사용
+    # 우선순위: 관리자 입력 > Naver News 자동 수집 > DB 기존 데이터
+    operator_summary = (extra_context or {}).get('episode_summary', '').strip()
+    if operator_summary:
+        episode_summary = operator_summary
+    else:
+        try:
+            from data_collector.context_fetcher import fetch_episode_context
+            episode_summary = fetch_episode_context(program_name, ep_num) or ep.get('news_summary') or ''
+            if episode_summary:
+                client.table('episodes').update(
+                    {'news_summary': episode_summary}
+                ).eq('id', episode_id).execute()
+        except Exception as e:
+            log.warning(f'context_fetcher 실패 (무시): {e}')
+            episode_summary = ep.get('news_summary') or ''
+
     context: dict = {
-        'episode_summary': (extra_context or {}).get('episode_summary') or ep.get('news_summary') or '',
+        'episode_summary': episode_summary,
         'trailer_hints': (extra_context or {}).get('trailer_hints') or '',
-        'news_summary': ep.get('news_summary') or '',
+        'news_summary': episode_summary,
         'reaction_score': ep.get('reaction_score') or 0,
         'top_clip_views': 0,
     }
