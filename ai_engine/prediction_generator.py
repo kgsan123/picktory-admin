@@ -78,6 +78,21 @@ _PLACEHOLDER_TERMS = [
     'A팀', 'B팀', '주요 커플', '기타 아티스트', '기타 팀', '기타 출연자',
 ]
 
+# 구체적 이름이 아닌 일반 명사 선택지 (실제 인물·곡명이어야 함)
+# "선택지에 없음/아무도 없음" 같은 예외 선택지는 허용
+_GENERIC_OPTIONS = {
+    '남자', '여자', '남성', '여성', '남솔로', '여솔로',
+    '진입', '미진입', '성공', '실패', '달성', '미달성',
+    '있음', '통과', '탈락',
+}
+
+def _odds_spread(options: list[dict]) -> float:
+    """선택지 배당의 최대-최소 차이. 너무 작으면 정보 없는(균등) 예측."""
+    odds = [o.get('odds', 0) for o in options if isinstance(o.get('odds'), (int, float))]
+    if len(odds) < 2:
+        return 1.0
+    return max(odds) - min(odds)
+
 
 def _apply_filters(predictions: list[dict]) -> list[dict]:
     """품질 필터 적용. 통과한 예측만 반환."""
@@ -120,6 +135,17 @@ def _apply_filters(predictions: list[dict]) -> list[dict]:
         all_text = content + ' ' + ' '.join(opt_texts)
         if any(t in all_text for t in _PLACEHOLDER_TERMS):
             log.debug(f"필터 제거 (플레이스홀더): {p.get('title')}")
+            continue
+
+        # 일반 명사 선택지 거부 (실제 이름·곡명 아닌 '남자/진입' 등)
+        generic_hits = [t for t in opt_texts if t in _GENERIC_OPTIONS]
+        if generic_hits:
+            log.debug(f"필터 제거 (일반명사 선택지 {generic_hits}): {p.get('title')}")
+            continue
+
+        # 균등 배당 거부 — 유력/이변 구도가 없으면 고르는 재미 없음
+        if _odds_spread(options) < 0.12:
+            log.debug(f"필터 제거 (배당 균등, 구도 없음): {p.get('title')}")
             continue
 
         if diff == 1:
