@@ -20,6 +20,12 @@ UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
 TIMEOUT = 8
 GOOGLE_RSS = 'https://news.google.com/rss/search'
 
+# 프로그램별 검색 제외 키워드 — 유사 이름 프로그램과 혼용 방지
+SHOW_EXCLUDE_TERMS: dict[str, list[str]] = {
+    '나는 SOLO': ['사계', '그 후', '그후', '사랑은 계속된다'],
+    '나는 솔로': ['사계', '그 후', '그후', '사랑은 계속된다'],
+}
+
 
 def _clean(text: str) -> str:
     """한자·일본어·제어문자·HTML 엔티티 제거, 한글/영문/숫자/기본 기호만 유지."""
@@ -79,15 +85,22 @@ class EpisodeContext:
     community_posts: list[str] = field(default_factory=list)
     chart_snippets: list[str] = field(default_factory=list)   # 음악방송 전용
     cast_names: list[str] = field(default_factory=list)       # 컨텍스트에서 추출한 이름
+    show_notes: str = ''                                       # 프로그램 형식 설명
     sources_used: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
 
     def to_prompt_text(self) -> str:
         parts = []
-        # 이름 목록을 맨 앞에 — AI가 이것만 사용하도록
+        # 프로그램 형식 설명 (있을 때)
+        if self.show_notes:
+            parts.append(f'[프로그램 형식] {self.show_notes}')
+        # 이름 목록 — 있으면 사용, 없으면 "이름 없음" 명시
         if self.cast_names:
             parts.append(f'[이번 회차 등장인물] {", ".join(self.cast_names)}')
-            parts.append('※ 위 이름 외 다른 이름은 절대 사용 금지')
+            parts.append('※ 위 이름만 사용. 학습 데이터·다른 프로그램 이름 절대 금지.')
+        else:
+            parts.append('[이번 회차 등장인물] 컨텍스트에서 이름 확인 불가')
+            parts.append('※ 이름을 만들어 내지 마세요. 이름 없이 가능한 유형(선택 결과, 순위, 이벤트 발생 여부)으로만 예측 작성.')
         if self.news_snippets:
             parts.append('[뉴스 기사]')
             parts.extend(f'- {s}' for s in self.news_snippets[:5])
@@ -106,19 +119,25 @@ class EpisodeContext:
 
 
 def _google_rss(query: str, ctx: EpisodeContext, label: str,
-                is_community: bool = False, program_name: str = '') -> None:
+                is_community: bool = False, program_name: str = '',
+                exclude_terms: list[str] | None = None) -> None:
     try:
         feed = feedparser.parse(
             f'{GOOGLE_RSS}?q={requests.utils.quote(query)}&hl=ko&gl=KR&ceid=KR:ko'
         )
         results = []
-        # 커뮤니티 포스트는 프로그램명 포함 여부로 관련성 필터
         keywords = [w for w in re.split(r'\s+', program_name) if len(w) >= 2] if program_name else []
+        excl = [e.lower() for e in (exclude_terms or [])]
         for entry in feed.entries[:8]:
             title = re.sub(r'\s*-\s*[^-]{1,30}$', '', entry.get('title', '')).strip()
+            title_raw = title  # 제외 필터는 클린 전 원본으로
             title = _clean(title)
             summary = _clean(entry.get('summary', ''))[:80]
             if not title:
+                continue
+            # 제외 키워드 포함 기사 skip
+            combined_raw = (title_raw + entry.get('summary', '')).lower()
+            if excl and any(e in combined_raw for e in excl):
                 continue
             text = title if not summary or summary[:30] in title else f'{title}. {summary}'
             # 커뮤니티 포스트: 관련 키워드 없으면 skip
@@ -185,25 +204,26 @@ def _dcinside(query: str, ctx: EpisodeContext) -> None:
         ctx.errors.append(f'dcinside: {e}')
 
 
-def fetch_episode_context(program_name: str, episode_num: int, category: str = 'drama') -> EpisodeContext:
+def fetch_episode_context(program_name: str, episode_num: int,
+                          category: str = 'drama', show_notes: str = '') -> EpisodeContext:
     """
     카테고리별 컨텍스트 수집.
-    - 공통: Google News RSS (회차 + 프로그램명) + 더쿠 (site:theqoo.net) + DC인사이드
-    - music 추가: 차트 동향 뉴스
-
-    Returns:
-        EpisodeContext
+    show_notes: DB shows.notes 필드 — 프로그램 형식 설명, 프롬프트에 전달됨.
     """
     ctx = EpisodeContext()
+    if show_notes:
+        ctx.show_notes = show_notes
+
+    excl = SHOW_EXCLUDE_TERMS.get(program_name, [])
 
     # 공통: 회차 명시 뉴스 → 프로그램명 뉴스
-    _google_rss(f'{program_name} {episode_num}회', ctx, 'news_ep')
+    _google_rss(f'{program_name} {episode_num}회', ctx, 'news_ep', exclude_terms=excl)
     if not ctx.news_snippets:
-        _google_rss(program_name, ctx, 'news_name')
+        _google_rss(program_name, ctx, 'news_name', exclude_terms=excl)
 
     # 더쿠 (Google 인덱싱) — 관련 없는 포스트 필터링
     _google_rss(f'{program_name} site:theqoo.net', ctx, 'theqoo',
-                is_community=True, program_name=program_name)
+                is_community=True, program_name=program_name, exclude_terms=excl)
 
     # DC인사이드
     _dcinside(program_name, ctx)

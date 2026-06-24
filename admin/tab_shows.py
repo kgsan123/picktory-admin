@@ -99,12 +99,23 @@ def _show_card(db, s: dict):
         new_cat = ec1.selectbox('카테고리', CATEGORIES,
                                  index=CATEGORIES.index(cat) if cat in CATEGORIES else 3,
                                  key=f'cat_{sid}')
+        new_notes = st.text_area(
+            '프로그램 형식 설명 (AI에 전달)',
+            value=s.get('notes') or '',
+            key=f'notes_{sid}',
+            placeholder=(
+                '예) 같은 기수의 남녀 솔로들이 만나는 형식. 하트시그널·다른 프로그램 이름 사용 금지.\n'
+                '예) 요리사 두 명이 대결하는 형식. 이번 회차 대결자는 컨텍스트에서 파악.'
+            ),
+            height=70,
+        )
         sc1, sc2 = st.columns(2)
         if sc1.button('설정 저장', key=f'save_{sid}'):
             db.table('shows').update({
                 'air_days': new_days,
                 'air_time_kst': new_time,
                 'category': new_cat,
+                'notes': new_notes,
             }).eq('id', sid).execute()
             st.toast('저장됨')
             st.rerun()

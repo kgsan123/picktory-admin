@@ -209,6 +209,15 @@ def generate_episode_predictions(episode_id: str, extra_context: dict | None = N
     ep_num = ep.get('episode_number') or 1
     program_name = ep.get('program_name', '')
 
+    # shows 테이블에서 프로그램 형식 설명(notes) 조회
+    show_notes = ''
+    try:
+        show_row = client.table('shows').select('notes').eq('name', program_name).maybe_single().execute()
+        if show_row and show_row.data:
+            show_notes = (show_row.data.get('notes') or '').strip()
+    except Exception:
+        pass
+
     # 우선순위: 관리자 입력 > 자동 수집(Google News + 더쿠 + DC) > DB 기존 데이터
     operator_summary = (extra_context or {}).get('episode_summary', '').strip()
     if operator_summary:
@@ -217,7 +226,8 @@ def generate_episode_predictions(episode_id: str, extra_context: dict | None = N
         try:
             from data_collector.context_fetcher import fetch_episode_context
             category = ep.get('category', 'drama')
-            ep_ctx = fetch_episode_context(program_name, ep_num, category=category)
+            ep_ctx = fetch_episode_context(program_name, ep_num, category=category,
+                                           show_notes=show_notes)
             auto_text = ep_ctx.to_prompt_text() or ep.get('news_summary') or ''
             chart_text = ep_ctx.to_chart_text()
             if auto_text:
