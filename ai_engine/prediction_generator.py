@@ -143,13 +143,13 @@ def generate_predictions(
                 time.sleep(2)
                 continue
 
-            filtered = _apply_filters(predictions)
-            if len(filtered) >= 3:
+            filtered = _apply_filters(predictions)[:6]  # 최대 6개
+            if len(filtered) >= 4:  # 4개 이상이면 통과 (필터로 일부 탈락 감안)
                 for p in filtered:
                     p['prompt_version'] = PROMPT_VERSION
                 return filtered
 
-            last_error = f'필터 후 {len(filtered)}개 (최소 3개 필요)'
+            last_error = f'필터 후 {len(filtered)}개 (최소 4개 필요)'
             log.info(last_error)
             time.sleep(2)
 
