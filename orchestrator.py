@@ -4,7 +4,6 @@ APScheduler로 방영 일정에 맞춰 파이프라인 자동 실행
 
 실행: python orchestrator.py
 """
-import json
 import time
 import logging
 import os
@@ -27,15 +26,15 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 DISCORD_WEBHOOK = os.environ.get('DISCORD_WEBHOOK_URL', '')
-SHOWS_PATH = os.path.join(os.path.dirname(__file__), 'shows.json')
 DAY_MAP = {'Mon': 0, 'Tue': 1, 'Wed': 2, 'Thu': 3, 'Fri': 4, 'Sat': 5, 'Sun': 6}
 
 
 # ── 유틸 ─────────────────────────────────────────────────────
 
 def load_shows() -> list:
-    with open(SHOWS_PATH, 'r', encoding='utf-8') as f:
-        return json.load(f)
+    """Supabase shows 테이블에서 추적 중인 프로그램 로드."""
+    from data_collector.episode_detector import get_shows_to_check
+    return get_shows_to_check()
 
 
 def send_discord(msg: str):

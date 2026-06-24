@@ -148,41 +148,51 @@ def generate_predictions(
 
 def generate_episode_predictions(episode_id: str) -> list[dict]:
     """
-    DB에서 에피소드 조회 → 데이터 수집 → 예측 생성 → DB 저장.
+    DB에서 에피소드 조회 → 예측 생성 → DB 저장.
+    데이터 수집은 선택적 — 실패해도 빈 context로 진행.
     Returns saved predictions list.
     """
     from db import get_client
-    from data_collector.news import fetch_news
-    from data_collector.reactions import fetch_reactions
-    from data_collector.episode_summary import fetch_episode_summary
-    from data_collector.youtube_clips import fetch_youtube_clips
 
     client = get_client()
     ep = client.table('episodes').select('*').eq('id', episode_id).single().execute().data
+    if not ep:
+        log.error(f'에피소드 미발견: {episode_id}')
+        return []
 
-    program = ep.get('program_name', '')
     ep_num = ep.get('episode_number') or 1
-    aired_raw = ep.get('aired_at') or ep.get('created_at')
-    aired_at = datetime.fromisoformat(aired_raw).astimezone(KST)
 
-    news = fetch_news(program, aired_at)
-    reactions = fetch_reactions(program, aired_at)
-    summary = fetch_episode_summary(program, ep_num)
-    yt = fetch_youtube_clips(program, ep_num, aired_at)
-
-    context = {
-        'episode_summary': summary.get('episode_summary', ''),
-        'trailer_hints': yt.get('trailer_hints', ''),
-        'news_summary': ep.get('news_summary') or news.get('news_summary', ''),
-        'reaction_score': ep.get('reaction_score') or reactions.get('reaction_score', 0),
-        'top_clip_views': yt.get('top_clip_views', 0),
+    # DB에 이미 수집된 데이터 우선 사용, 없으면 빈 값으로 진행
+    context: dict = {
+        'episode_summary': '',
+        'trailer_hints': '',
+        'news_summary': ep.get('news_summary') or '',
+        'reaction_score': ep.get('reaction_score') or 0,
+        'top_clip_views': 0,
     }
+
+    # 선택적 데이터 보완 (실패해도 계속 진행)
+    try:
+        from data_collector.episode_summary import fetch_episode_summary
+        summary = fetch_episode_summary(ep.get('program_name', ''), ep_num)
+        context['episode_summary'] = summary.get('episode_summary', '')
+    except Exception:
+        pass
+
+    try:
+        from data_collector.youtube_clips import fetch_youtube_clips
+        aired_raw = ep.get('aired_at') or ep.get('created_at')
+        aired_at = datetime.fromisoformat(aired_raw).astimezone(KST)
+        yt = fetch_youtube_clips(ep.get('program_name', ''), ep_num, aired_at)
+        context['trailer_hints'] = yt.get('trailer_hints', '')
+        context['top_clip_views'] = yt.get('top_clip_views', 0)
+    except Exception:
+        pass
 
     predictions = generate_predictions(ep, context)
     if not predictions:
         return []
 
-    next_ep = ep_num + 1
     rows = []
     for p in predictions:
         rows.append({
@@ -205,7 +215,7 @@ def generate_episode_predictions(episode_id: str) -> list[dict]:
             {'pipeline_status': 'generated'}
         ).eq('id', episode_id).execute()
 
-    log.info(f"예측 {len(rows)}개 저장 완료 (episode_id={episode_id}, 다음회차={next_ep})")
+    log.info(f'예측 {len(rows)}개 저장 (episode_id={episode_id})')
     return rows
 
 

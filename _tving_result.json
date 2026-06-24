@@ -1,0 +1,191 @@
+[
+  {
+    "name": "오십프로",
+    "channel": "Tving",
+    "category": "variety",
+    "clip_count_7d": 17,
+    "source": "tving_new_episode",
+    "latest_episode": null,
+    "season": null
+  },
+  {
+    "name": "콩콩팜팜",
+    "channel": "tvN",
+    "category": "variety",
+    "clip_count_7d": 20,
+    "source": "tving_live",
+    "latest_episode": 1,
+    "season": null
+  },
+  {
+    "name": "연애전쟁",
+    "channel": "JTBC2",
+    "category": "romance",
+    "clip_count_7d": 15,
+    "source": "tving_live",
+    "latest_episode": 1,
+    "season": null
+  },
+  {
+    "name": "스트릿 레스토랑 파이터",
+    "channel": "tvN STORY",
+    "category": "survival",
+    "clip_count_7d": 12,
+    "source": "tving_live",
+    "latest_episode": 1,
+    "season": null
+  },
+  {
+    "name": "하트시그널 시즌5",
+    "channel": "채널A플러스",
+    "category": "romance",
+    "clip_count_7d": 11,
+    "source": "tving_live",
+    "latest_episode": 11,
+    "season": null
+  },
+  {
+    "name": "내일도 출근!",
+    "channel": "tvN DRAMA",
+    "category": "variety",
+    "clip_count_7d": 8,
+    "source": "tving_live",
+    "latest_episode": 1,
+    "season": null
+  },
+  {
+    "name": "현지에서 먹힐까? 미국편",
+    "channel": "tvN SHOW",
+    "category": "variety",
+    "clip_count_7d": 7,
+    "source": "tving_live",
+    "latest_episode": 6,
+    "season": null
+  },
+  {
+    "name": "신입사원 강회장",
+    "channel": "Tving",
+    "category": "variety",
+    "clip_count_7d": 20,
+    "source": "tving_new_episode",
+    "latest_episode": null,
+    "season": null
+  },
+  {
+    "name": "냉장고를 부탁해",
+    "channel": "Tving",
+    "category": "variety",
+    "clip_count_7d": 15,
+    "source": "tving_new_episode",
+    "latest_episode": null,
+    "season": null
+  },
+  {
+    "name": "놀면 뭐하니?",
+    "channel": "Tving",
+    "category": "variety",
+    "clip_count_7d": 13,
+    "source": "tving_new_episode",
+    "latest_episode": null,
+    "season": null
+  },
+  {
+    "name": "첫 번째 남자",
+    "channel": "Tving",
+    "category": "variety",
+    "clip_count_7d": 9,
+    "source": "tving_new_episode",
+    "latest_episode": null,
+    "season": null
+  },
+  {
+    "name": "전지적 참견 시점",
+    "channel": "Tving",
+    "category": "variety",
+    "clip_count_7d": 8,
+    "source": "tving_new_episode",
+    "latest_episode": null,
+    "season": null
+  },
+  {
+    "name": "아는 형님",
+    "channel": "Tving",
+    "category": "variety",
+    "clip_count_7d": 5,
+    "source": "tving_new_episode",
+    "latest_episode": null,
+    "season": null
+  },
+  {
+    "name": "놀러코스터",
+    "channel": "Tving",
+    "category": "variety",
+    "clip_count_7d": 4,
+    "source": "tving_new_episode",
+    "latest_episode": null,
+    "season": null
+  },
+  {
+    "name": "지팡이와 검의 위스토리아 Season 2",
+    "channel": "Tving",
+    "category": "variety",
+    "clip_count_7d": 2,
+    "source": "tving_new_episode",
+    "latest_episode": null,
+    "season": null
+  },
+  {
+    "name": "벌거벗은 세계사",
+    "channel": "Tving",
+    "category": "variety",
+    "clip_count_7d": 15,
+    "source": "tving_new_episode",
+    "latest_episode": null,
+    "season": null
+  },
+  {
+    "name": "이호선 상담소",
+    "channel": "Tving",
+    "category": "variety",
+    "clip_count_7d": 14,
+    "source": "tving_new_episode",
+    "latest_episode": null,
+    "season": null
+  },
+  {
+    "name": "오은영 리포트 - 결혼 지옥",
+    "channel": "Tving",
+    "category": "romance",
+    "clip_count_7d": 13,
+    "source": "tving_new_episode",
+    "latest_episode": null,
+    "season": null
+  },
+  {
+    "name": "킬잇 : 스타일 크리에이터 대전쟁",
+    "channel": "Tving",
+    "category": "variety",
+    "clip_count_7d": 19,
+    "source": "tving_new_episode",
+    "latest_episode": null,
+    "season": null
+  },
+  {
+    "name": "이스케이프 큐브",
+    "channel": "Tving",
+    "category": "variety",
+    "clip_count_7d": 19,
+    "source": "tving_new_episode",
+    "latest_episode": null,
+    "season": null
+  },
+  {
+    "name": "탐정들의 영업비밀",
+    "channel": "Tving",
+    "category": "variety",
+    "clip_count_7d": 3,
+    "source": "tving_new_episode",
+    "latest_episode": null,
+    "season": null
+  }
+]

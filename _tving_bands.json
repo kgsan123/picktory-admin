@@ -1,0 +1,481 @@
+{
+  "BANNER_MAIN": {
+    "bandName": "",
+    "count": 6,
+    "sample": [
+      {
+        "title": "",
+        "label": {
+          "isOnly": true,
+          "isLive": true
+        },
+        "keys": [
+          "description",
+          "titleImageUrl",
+          "imageUrl",
+          "code",
+          "bannerCode",
+          "isManual",
+          "voiceTitle",
+          "copyrightText",
+          "verticalBackgroundColor",
+          "label"
+        ]
+      },
+      {
+        "title": "",
+        "label": {
+          "isOriginal": true
+        },
+        "keys": [
+          "title1",
+          "title2",
+          "description",
+          "imageUrl",
+          "linkUrl",
+          "bannerCode",
+          "isManual",
+          "voiceTitle",
+          "copyrightText",
+          "verticalBackgroundColor",
+          "label"
+        ]
+      },
+      {
+        "title": "",
+        "label": {},
+        "keys": [
+          "description",
+          "titleImageUrl",
+          "imageUrl",
+          "code",
+          "bannerCode",
+          "isManual",
+          "voiceTitle",
+          "copyrightText",
+          "verticalBackgroundColor",
+          "label"
+        ]
+      }
+    ]
+  },
+  "VOD_SPECIAL_BUTTON": {
+    "bandName": "",
+    "count": 8,
+    "sample": [
+      {
+        "title": "[코미디숏리그]",
+        "label": null,
+        "keys": [
+          "title",
+          "buttonImageUrl",
+          "imageUrl",
+          "linkUrl",
+          "isNewWindow"
+        ]
+      },
+      {
+        "title": "[워너원]",
+        "label": null,
+        "keys": [
+          "title",
+          "buttonImageUrl",
+          "imageUrl",
+          "linkUrl",
+          "isNewWindow"
+        ]
+      },
+      {
+        "title": "윔블던 챔피언십",
+        "label": null,
+        "keys": [
+          "title",
+          "buttonImageUrl",
+          "imageUrl",
+          "linkUrl",
+          "isNewWindow"
+        ]
+      }
+    ]
+  },
+  "VOD_BASIC": {
+    "bandName": "너 그거 봤어? 지금 화제작",
+    "count": 20,
+    "sample": [
+      {
+        "title": "신입사원 강회장",
+        "label": {
+          "isOnly": true,
+          "isNewEpisode": true
+        },
+        "keys": [
+          "code",
+          "title",
+          "imageUrl",
+          "label"
+        ]
+      },
+      {
+        "title": "오십프로",
+        "label": {
+          "isNewEpisode": true
+        },
+        "keys": [
+          "code",
+          "title",
+          "imageUrl",
+          "label"
+        ]
+      },
+      {
+        "title": "스트릿 레스토랑 파이터",
+        "label": {
+          "isOnly": true,
+          "isNewEpisode": true
+        },
+        "keys": [
+          "code",
+          "title",
+          "imageUrl",
+          "label"
+        ]
+      }
+    ]
+  },
+  "VA_LINE": {
+    "bandName": "",
+    "count": 1,
+    "sample": [
+      {
+        "title": "",
+        "label": null,
+        "keys": [
+          "url"
+        ]
+      }
+    ]
+  },
+  "DA_LINE": {
+    "bandName": "",
+    "count": 1,
+    "sample": [
+      {
+        "title": "",
+        "label": null,
+        "keys": [
+          "url"
+        ]
+      }
+    ]
+  },
+  "LIVE_RANKING": {
+    "bandName": "실시간 인기 LIVE",
+    "count": 20,
+    "sample": [
+      {
+        "title": "하트시그널 시즌5 11화",
+        "label": {},
+        "keys": [
+          "code",
+          "channelName",
+          "type",
+          "title",
+          "broadcastStartTime",
+          "broadcastEndTime",
+          "liveRating",
+          "label",
+          "stillshotUrl"
+        ]
+      },
+      {
+        "title": "킬잇 : 스타일 크리에이터 대전쟁 7화",
+        "label": {},
+        "keys": [
+          "code",
+          "channelName",
+          "type",
+          "title",
+          "broadcastStartTime",
+          "broadcastEndTime",
+          "liveRating",
+          "label",
+          "stillshotUrl"
+        ]
+      },
+      {
+        "title": "[198회] 예능의 신(神)",
+        "label": {},
+        "keys": [
+          "code",
+          "channelName",
+          "type",
+          "title",
+          "broadcastStartTime",
+          "broadcastEndTime",
+          "liveRating",
+          "label",
+          "stillshotUrl"
+        ]
+      }
+    ]
+  },
+  "LIVE_BASIC": {
+    "bandName": "고민 끝! 티빙 추천 LIVE 채널",
+    "count": 20,
+    "sample": [
+      {
+        "title": "",
+        "label": {},
+        "keys": [
+          "code",
+          "channelName",
+          "type",
+          "frequency",
+          "broadcastStartTime",
+          "broadcastEndTime",
+          "label",
+          "imageUrl"
+        ]
+      },
+      {
+        "title": "",
+        "label": {},
+        "keys": [
+          "code",
+          "channelName",
+          "type",
+          "frequency",
+          "broadcastStartTime",
+          "broadcastEndTime",
+          "label",
+          "imageUrl"
+        ]
+      },
+      {
+        "title": "",
+        "label": {},
+        "keys": [
+          "code",
+          "channelName",
+          "type",
+          "frequency",
+          "broadcastStartTime",
+          "broadcastEndTime",
+          "label",
+          "imageUrl"
+        ]
+      }
+    ]
+  },
+  "VOD_BASIC_RANKING": {
+    "bandName": "오늘의 티빙 TOP 20",
+    "count": 20,
+    "sample": [
+      {
+        "title": "신입사원 강회장",
+        "label": {
+          "isOnly": true,
+          "isNewEpisode": true
+        },
+        "keys": [
+          "code",
+          "title",
+          "imageUrl",
+          "label"
+        ]
+      },
+      {
+        "title": "콩콩팜팜",
+        "label": {
+          "isOnly": true
+        },
+        "keys": [
+          "code",
+          "title",
+          "imageUrl",
+          "label"
+        ]
+      },
+      {
+        "title": "취사병 전설이 되다",
+        "label": {
+          "isOriginal": true
+        },
+        "keys": [
+          "code",
+          "title",
+          "imageUrl",
+          "label"
+        ]
+      }
+    ]
+  },
+  "SHORTS_BASIC": {
+    "bandName": "심심할 틈 없는 쇼츠",
+    "count": 20,
+    "sample": [
+      {
+        "title": "뭐든 나누면 행복이 두 배✌",
+        "label": {},
+        "keys": [
+          "code",
+          "title",
+          "imageUrl",
+          "linkUrl",
+          "params",
+          "label"
+        ]
+      },
+      {
+        "title": "비야인드 여름성의 시작 - 삼성 (1)",
+        "label": {},
+        "keys": [
+          "code",
+          "title",
+          "imageUrl",
+          "linkUrl",
+          "params",
+          "label"
+        ]
+      },
+      {
+        "title": "한정판의 유혹 #스트릿레스토랑파이터",
+        "label": {},
+        "keys": [
+          "code",
+          "title",
+          "imageUrl",
+          "linkUrl",
+          "params",
+          "label"
+        ]
+      }
+    ]
+  },
+  "BANNER_LINE": {
+    "bandName": "",
+    "count": 1,
+    "sample": [
+      {
+        "title": "",
+        "label": null,
+        "keys": [
+          "title",
+          "imageUrl",
+          "linkUrl",
+          "bannerCode",
+          "backgroundColor"
+        ]
+      }
+    ]
+  },
+  "POLL_BASIC": {
+    "bandName": "코미디숏리그 투표",
+    "count": 1,
+    "sample": [
+      {
+        "title": "",
+        "label": null,
+        "keys": [
+          "url"
+        ]
+      }
+    ]
+  },
+  "VOD_BASIC_CONTENT": {
+    "bandName": "코미디숏리그",
+    "count": 11,
+    "sample": [
+      {
+        "title": "코미디숏리그",
+        "label": {
+          "isOriginal": true
+        },
+        "keys": [
+          "code",
+          "title",
+          "imageUrl",
+          "label"
+        ]
+      },
+      {
+        "title": "코미디숏리그",
+        "label": null,
+        "keys": [
+          "code",
+          "title",
+          "imageUrl"
+        ]
+      },
+      {
+        "title": "코미디숏리그",
+        "label": null,
+        "keys": [
+          "code",
+          "title",
+          "imageUrl"
+        ]
+      }
+    ]
+  },
+  "VOD_BASIC_ORIGINAL": {
+    "bandName": "티빙 오리지널",
+    "count": 20,
+    "sample": [
+      {
+        "title": "취사병 전설이 되다",
+        "label": {
+          "isOriginal": true
+        },
+        "keys": [
+          "code",
+          "title",
+          "imageUrl",
+          "titleImageUrl",
+          "label"
+        ]
+      },
+      {
+        "title": "친애하는 X",
+        "label": {
+          "isOriginal": true,
+          "isGrade18": true
+        },
+        "keys": [
+          "code",
+          "title",
+          "imageUrl",
+          "titleImageUrl",
+          "label"
+        ]
+      },
+      {
+        "title": "유미의 세포들 시즌3",
+        "label": {
+          "isOriginal": true
+        },
+        "keys": [
+          "code",
+          "title",
+          "imageUrl",
+          "titleImageUrl",
+          "label"
+        ]
+      }
+    ]
+  },
+  "NOTICE": {
+    "bandName": "",
+    "count": 1,
+    "sample": [
+      {
+        "title": "구글/애플 인앱결제 이용권 신규 구독료 변경 안내 (2026년 2월 23일)",
+        "label": null,
+        "keys": [
+          "title",
+          "code"
+        ]
+      }
+    ]
+  }
+}
