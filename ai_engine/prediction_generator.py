@@ -176,27 +176,30 @@ def generate_episode_predictions(episode_id: str, extra_context: dict | None = N
     ep_num = ep.get('episode_number') or 1
     program_name = ep.get('program_name', '')
 
-    # 우선순위: 관리자 입력 > Naver News 자동 수집 > DB 기존 데이터
+    # 우선순위: 관리자 입력 > 자동 수집(Google News + 더쿠 + DC) > DB 기존 데이터
     operator_summary = (extra_context or {}).get('episode_summary', '').strip()
     if operator_summary:
-        episode_summary = operator_summary
+        auto_text = operator_summary
     else:
         try:
             from data_collector.context_fetcher import fetch_episode_context
-            episode_summary = fetch_episode_context(program_name, ep_num) or ep.get('news_summary') or ''
-            if episode_summary:
+            ep_ctx = fetch_episode_context(program_name, ep_num)
+            auto_text = ep_ctx.to_prompt_text() or ep.get('news_summary') or ''
+            if auto_text:
                 client.table('episodes').update(
-                    {'news_summary': episode_summary}
+                    {'news_summary': auto_text[:1000]}
                 ).eq('id', episode_id).execute()
+            if ep_ctx.errors:
+                log.debug(f'context_fetcher 부분 실패: {ep_ctx.errors}')
         except Exception as e:
             log.warning(f'context_fetcher 실패 (무시): {e}')
-            episode_summary = ep.get('news_summary') or ''
+            auto_text = ep.get('news_summary') or ''
 
     context: dict = {
-        'episode_summary': episode_summary,
+        'episode_summary': auto_text,
         'trailer_hints': (extra_context or {}).get('trailer_hints') or '',
-        'news_summary': episode_summary,
-        'reaction_score': ep.get('reaction_score') or 0,
+        'news_summary': auto_text,
+        'reaction_score': 0,
         'top_clip_views': 0,
     }
 
