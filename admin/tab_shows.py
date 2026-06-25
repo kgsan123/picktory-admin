@@ -111,10 +111,12 @@ def _show_card(db, s: dict):
             st.divider()
             st.caption('⚙️ 설정')
             ec1, ec2 = st.columns(2)
+            new_channel = ec1.text_input('방송사', value=s.get('channel') or '',
+                                          key=f'ch_{sid}', placeholder='예: SBS, tvN, ENA')
+            new_time = ec2.text_input('방영 시각 (HH:MM)', value=air_time, key=f'time_{sid}')
             new_days = ec1.multiselect('방영 요일', DAYS_OPTIONS,
                                         default=s.get('air_days') or [], key=f'days_{sid}')
-            new_time = ec2.text_input('방영 시각 (HH:MM)', value=air_time, key=f'time_{sid}')
-            new_cat = ec1.selectbox('카테고리', CATEGORIES,
+            new_cat = ec2.selectbox('카테고리', CATEGORIES,
                                      index=CATEGORIES.index(cat) if cat in CATEGORIES else 3,
                                      format_func=lambda c: CAT_LABEL.get(c, c),
                                      key=f'cat_{sid}')
@@ -131,6 +133,7 @@ def _show_card(db, s: dict):
             sc1, sc2 = st.columns(2)
             if sc1.button('설정 저장', key=f'save_{sid}', use_container_width=True):
                 db.table('shows').update({
+                    'channel': new_channel.strip(),
                     'air_days': new_days,
                     'air_time_kst': new_time,
                     'category': new_cat,
