@@ -320,7 +320,24 @@ def generate_predictions(
             log.warning(f'Groq API 시도 {attempt+1} 실패: {e}')
             time.sleep(3)
 
-    raise RuntimeError(f'예측 생성 실패: {last_error}')
+    raise RuntimeError(classify_generation_error(last_error))
+
+
+def classify_generation_error(text: str) -> str:
+    """raw 실패 메시지를 운영자용 한국어 사유로 분류."""
+    raw = str(text)
+    t = raw.lower()
+    if any(k in t for k in ('rate_limit', '429', 'tokens per day', 'tpd', 'rate limit')):
+        return 'AI 일일 토큰 한도 초과 — 한도 회복 후(수십 분~) 재시도하거나 Groq 티어 업그레이드 필요'
+    if 'groq_api_key' in t:
+        return 'GROQ_API_KEY 미설정 — 환경변수 확인 필요'
+    if 'json' in t or '파싱' in raw:
+        return 'AI 응답 형식 오류(JSON 파싱 실패) — 다시 시도하세요'
+    if '필터 후' in raw or '최소 4개' in raw:
+        return '생성된 예측이 품질 기준(선택지·검증·차등배당)을 통과 못함 — 컨텍스트 보강 후 재시도'
+    if 'timeout' in t or 'connection' in t:
+        return 'AI 서버 응답 지연/연결 실패 — 다시 시도하세요'
+    return f'생성 오류: {raw[:160]}'
 
 
 def generate_episode_predictions(episode_id: str, extra_context: dict | None = None) -> list[dict]:

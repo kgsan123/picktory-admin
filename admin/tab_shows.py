@@ -37,7 +37,7 @@ def _upsert_episode(db, show: dict, episode_num: int) -> str | None:
 def _run_generate(db, show: dict, episode_num: int, extra_context: dict) -> str:
     episode_id = _upsert_episode(db, show, episode_num)
     if not episode_id:
-        return '에피소드 DB 등록 실패'
+        return '❌ 실패: 에피소드 DB 등록 실패'
     try:
         from ai_engine.prediction_generator import generate_episode_predictions
         preds = generate_episode_predictions(episode_id, extra_context=extra_context)
@@ -46,17 +46,25 @@ def _run_generate(db, show: dict, episode_num: int, extra_context: dict) -> str:
                 {'current_episode': episode_num + 1}
             ).eq('id', show['id']).execute()
             return f'✅ {len(preds)}개 예측 생성 → [예측] 탭에서 검토 후 게시'
-        # 컨텍스트 부족으로 건너뛴 경우 안내
+        # 0개 — 이유 구분
+        status = ''
         try:
             ep_row = db.table('episodes').select('pipeline_status').eq('id', episode_id).single().execute().data
-            if ep_row and ep_row.get('pipeline_status') == 'context_insufficient':
-                return ('⚠️ 수집된 정보가 부족해 생성을 건너뛰었습니다. '
-                        '아래 [컨텍스트·설정]에서 "이번 회차 핵심 내용"을 직접 입력 후 다시 시도하세요.')
+            status = (ep_row or {}).get('pipeline_status', '')
         except Exception:
             pass
-        return '예측 0개 생성 (필터 탈락 또는 AI 응답 파싱 실패)'
+        if status == 'context_insufficient':
+            return ('⚠️ 실패(수집 정보 부족): 이 회차에 대한 뉴스·후기가 충분히 수집되지 않았습니다. '
+                    '아래 [컨텍스트·설정]의 "이번 회차 핵심 내용"에 줄거리·출연자를 직접 입력 후 다시 시도하세요.')
+        return '⚠️ 실패: 예측 0개 (생성 결과 없음) — 다시 시도하세요.'
     except Exception as e:
-        return f'❌ 오류: {e}'
+        # generate_predictions가 이미 사유를 분류해 raise하므로 그대로 표시.
+        # 그 외(DB 등) 예외는 분류해서 보강.
+        from ai_engine.prediction_generator import classify_generation_error
+        msg = str(e)
+        if '한도' in msg or '품질 기준' in msg or 'JSON' in msg or '미설정' in msg or '연결' in msg:
+            return f'❌ 실패: {msg}'
+        return f'❌ 실패: {classify_generation_error(msg)}'
 
 
 def _show_card(db, s: dict):
@@ -154,7 +162,13 @@ def _show_card(db, s: dict):
         }
         with st.spinner(f'{s["name"]} {ep_input}회 예측 생성 중... (10~20초)'):
             msg = _run_generate(db, s, ep_input, extra)
-        st.toast(msg)
+        # 성공은 토스트, 실패는 사유가 보이도록 지속 표시
+        if msg.startswith('✅'):
+            st.success(msg)
+        elif msg.startswith('⚠️'):
+            st.warning(msg)
+        else:
+            st.error(msg)
 
 
 def render(db):
