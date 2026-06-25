@@ -62,12 +62,13 @@ def _extract_names(snippets: list[str]) -> list[str]:
             if label not in seen:
                 seen.add(label)
                 result.append(label)
-        # 패턴 2: "영자씨", "영식이" — 호칭이 붙은 이름 (2~3자)
-        # 단, X기 패턴 이름이 이미 충분하면 skip (오탐 줄이기)
+        # 패턴 2: "영자씨" — 호칭 "씨"가 붙은 이름만 (고신뢰).
+        # 주격/목적격 조사 '이/가/야/아'는 일반어를 이름으로 오인하므로 제외.
+        # (예: "단둘이"→"단둘", "소개팅이"→"소개팅" 오탐 방지)
         if len(result) < 3:
-            for m in re.finditer(r'([가-힣]{2,3})(씨|이(?=[가-힣\s])|야|아(?=[가-힣\s]))', text):
+            for m in re.finditer(r'([가-힣]{2,3})씨(?:가|는|와|도|의|를|에게|랑|\b|\s|$)', text):
                 name = m.group(1)
-                if name not in seen and not _is_common_word(name) and len(name) >= 2:
+                if name not in seen and not _is_common_word(name):
                     seen.add(name)
                     result.append(name)
 
@@ -82,6 +83,7 @@ def _is_common_word(word: str) -> bool:
         '남자', '여자', '남성', '여성', '솔로', '커플', '게스트', '출연자',
         '진행', '진심', '진짜', '정말', '사실', '생각', '느낌', '눈물',
         '대화', '이야기', '질문', '대답', '고백', '키스', '데이트',
+        '아저', '아가', '총각', '단둘', '소개팅', '아줌마', '아빠', '엄마',
     }
     return word in COMMON
 
@@ -235,6 +237,8 @@ def _google_rss_chart(query: str, ctx: EpisodeContext, label: str) -> None:
 
 
 def _dcinside(query: str, ctx: EpisodeContext) -> None:
+    # DC 검색은 느슨해서 무관 글이 섞임 → 프로그램명 키워드 포함 글만 통과
+    keywords = [w for w in re.split(r'\s+', query) if len(w) >= 2]
     try:
         time.sleep(1)
         url = 'https://gall.dcinside.com/board/lists/'
@@ -256,8 +260,13 @@ def _dcinside(query: str, ctx: EpisodeContext) -> None:
                 if not title_el:
                     continue
                 text = _clean(title_el.get_text(strip=True))
-                if text and len(text) > 5 and '공지' not in text:
-                    found.append(f'[DC] {text}')
+                if not text or len(text) <= 5 or '공지' in text:
+                    continue
+                # 프로그램명 키워드가 제목에 있어야 관련 글로 인정
+                compact = text.replace(' ', '')
+                if keywords and not any(kw.replace(' ', '') in compact for kw in keywords):
+                    continue
+                found.append(f'[DC] {text}')
             if found:
                 ctx.community_posts.extend(found[:5])
                 ctx.sources_used.append(f'dc_{gall_id}')
