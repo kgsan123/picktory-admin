@@ -1,5 +1,11 @@
 # DECISIONS.md
 
+## 2026-06-25 검증 자동 해소 (pending 재검증 sweep)
+**Decision:** orchestrator에 매일 11:00 KST `resolve_pending_sweep()` cron 추가. pending+published 예측을 (program, target_episode_number)로 그룹화해, 방영된 회차 레코드가 있고 aired_at이 SETTLE_HOURS(6h) 지난 회차에 대해 기존 `verify_episode`를 재호출. EXPIRE_DAYS(7일) 초과 미판정은 status='expired' + Discord 알림. 한 sweep당 MAX_PER_SWEEP(15)회차 상한(Groq 한도 보호). 어드민 [예측] 탭에 "지금 재검증" 수동 버튼 추가.
+**Reason:** 기존엔 verify가 방영 +1h에 한 번만 실행 → 결과 기사 미축적으로 대부분 pending인데 재시도가 없어 영영 미판정. 게임에 정답이 안 생김.
+**Impact:** 새 검증 로직 없이 verify_episode 재사용. 데이터 부족 회차는 Groq 호출 없이 다음 날로 보류. 게이팅(만료/검증/SETTLE skip) 3시나리오 테스트 통과.
+**Alternatives considered:** run_pipeline의 즉시 verify를 +12~24h 지연 — sweep이 더 견고(여러 날 재시도)해서 채택, 즉시 verify는 보조로 유지.
+
 ## 2026-06-25 트랙 C(일부): 컨텍스트 게이트 + 수집 정밀화
 **Decision:** (rank8) 운영자 입력도 없고 자동 수집 신호도 부족(news+community<2 AND 줄거리 없음)하면 생성을 건너뛰고 pipeline_status='context_insufficient' + 어드민/Discord 알림. (rank12) fetch_ratings에 episode_num 추가해 해당 회차 언급 기사 시청률 우선, fetch_reactions에 category 추가해 DC 갤러리 라우팅(music→kpop, 그 외→drama).
 **Reason:** 컨텍스트 빈약 시 환각 예측만 나오고 Groq 토큰만 소모. 회차 무관 시청률/항상 drama 갤러리는 부정확.

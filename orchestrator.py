@@ -28,6 +28,11 @@ log = logging.getLogger(__name__)
 DISCORD_WEBHOOK = os.environ.get('DISCORD_WEBHOOK_URL', '')
 DAY_MAP = {'Mon': 0, 'Tue': 1, 'Wed': 2, 'Thu': 3, 'Fri': 4, 'Sat': 5, 'Sun': 6}
 
+# pending 재검증 sweep 튜닝 상수
+SETTLE_HOURS = 6      # 방영 후 이 시간은 지나야 데이터 축적됐다고 보고 검증 시도
+EXPIRE_DAYS = 7       # 이 기간 넘게 판정 못 한 pending 예측은 만료 처리
+MAX_PER_SWEEP = 15    # 한 sweep당 최대 검증 회차 수 (Groq 일일 한도 보호)
+
 
 # ── 유틸 ─────────────────────────────────────────────────────
 
@@ -181,6 +186,89 @@ def run_weekly_discovery():
         send_discord(f'⚠️ [discovery] 주간 자동 발견 실패: {e}')
 
 
+def _parse_aired(raw: str | None):
+    """aired_at 문자열 → KST datetime. 실패 시 None."""
+    if not raw:
+        return None
+    try:
+        dt = datetime.fromisoformat(str(raw).replace('Z', '+00:00'))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=KST)
+        return dt.astimezone(KST)
+    except Exception:
+        return None
+
+
+def resolve_pending_sweep():
+    """
+    아직 pending인 published 예측을, 방영이 끝나 데이터가 쌓인 회차에 대해 재검증.
+    verify_episode(fresh 재수집 + 선택지 매칭)를 재사용. 데이터 부족하면 토큰 없이 보류.
+    """
+    from db import get_client
+    from ai_engine.answer_verifier import verify_episode
+    client = get_client()
+    now = datetime.now(KST)
+
+    try:
+        rows = (client.table('predictions')
+                .select('program_name,target_episode_number')
+                .eq('verdict', 'pending').eq('status', 'published')
+                .execute().data) or []
+    except Exception as e:
+        log.error(f'[sweep] pending 조회 실패: {e}')
+        return
+
+    groups = sorted({
+        (r['program_name'], r['target_episode_number']) for r in rows
+        if r.get('program_name') and r.get('target_episode_number')
+    })
+    if not groups:
+        log.info('[sweep] 재검증할 pending 예측 없음')
+        return
+
+    resolved_eps = pending_eps = expired_eps = verified = capped = 0
+
+    for program, target_ep in groups:
+        if verified >= MAX_PER_SWEEP:
+            capped += 1
+            continue
+
+        ep_rows = (client.table('episodes')
+                   .select('id,aired_at')
+                   .eq('program_name', program).eq('episode_number', target_ep)
+                   .order('aired_at', desc=True).limit(1).execute().data) or []
+        if not ep_rows:
+            continue  # target 회차 방영 기록 없음 → 아직 검증 불가
+
+        aired = _parse_aired(ep_rows[0].get('aired_at'))
+        if aired is None or aired > now - timedelta(hours=SETTLE_HOURS):
+            continue  # 아직 방영 직후 → 데이터 미축적, 다음 sweep에서
+
+        if aired < now - timedelta(days=EXPIRE_DAYS):
+            # 기한 초과 → 만료 처리 (무한 재시도 방지)
+            client.table('predictions').update({'status': 'expired'}) \
+                .eq('program_name', program).eq('target_episode_number', target_ep) \
+                .eq('verdict', 'pending').eq('status', 'published').execute()
+            expired_eps += 1
+            send_discord(f'⏰ {program} {target_ep}회: {EXPIRE_DAYS}일 내 판정 실패로 만료 처리 — 필요시 수동 판정')
+            continue
+
+        results = verify_episode(ep_rows[0]['id'])
+        verified += 1
+        if any(r.get('verdict') != 'pending' for r in results):
+            resolved_eps += 1
+        else:
+            pending_eps += 1
+
+    log.info(f'[sweep] 검증 {verified}회차: 판정 {resolved_eps} / 보류 {pending_eps} / 만료 {expired_eps}'
+             + (f' / 상한초과 {capped}' if capped else ''))
+    if resolved_eps or expired_eps:
+        msg = f'🔁 검증 sweep: {resolved_eps}회차 판정 완료, {pending_eps}회차 보류, {expired_eps}회차 만료'
+        if capped:
+            msg += f' (상한으로 {capped}회차 다음 sweep 대기)'
+        send_discord(msg)
+
+
 def main():
     shows = load_shows()
     scheduler = BlockingScheduler(timezone=KST)
@@ -203,6 +291,14 @@ def main():
         run_weekly_discovery,
         trigger=CronTrigger(day_of_week='sun', hour=6, minute=0, timezone=KST),
         id='weekly_discovery',
+        replace_existing=True,
+    )
+
+    # 매일 11:00 pending 예측 재검증 (전날 저녁 방영분 데이터 축적 후)
+    scheduler.add_job(
+        resolve_pending_sweep,
+        trigger=CronTrigger(hour=11, minute=0, timezone=KST),
+        id='resolve_pending_sweep',
         replace_existing=True,
     )
 

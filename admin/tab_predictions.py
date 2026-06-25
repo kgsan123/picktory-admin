@@ -10,6 +10,16 @@ def render(db):
     st.subheader('예측 검토')
     st.caption('draft → 게시 → 방영 후 정답 입력')
 
+    if st.button('🔁 지금 pending 재검증', help='방영 끝난 회차의 미판정 예측을 AI로 즉시 재검증'):
+        with st.spinner('pending 예측 재검증 중...'):
+            try:
+                from orchestrator import resolve_pending_sweep
+                resolve_pending_sweep()
+                st.toast('재검증 완료 — 결과를 확인하세요')
+                st.rerun()
+            except Exception as e:
+                st.error(f'재검증 실패: {e}')
+
     c1, c2 = st.columns([2, 2])
     filter_status = c1.selectbox('상태 필터', ['draft', 'published', '전체', 'expired'],
                                   key='pred_filter')
