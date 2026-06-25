@@ -22,6 +22,8 @@ KST = timezone(timedelta(hours=9))
 UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
 TIMEOUT = 8
 GOOGLE_RSS = 'https://news.google.com/rss/search'
+# 날짜 필터 lookback: aired_at 기준 이만큼 이전 글까지 허용 (aired_at 부정확 대비)
+CONTEXT_LOOKBACK_HOURS = 48
 
 # 프로그램별 검색 제외 키워드 — 유사 이름 프로그램과 혼용 방지
 SHOW_EXCLUDE_TERMS: dict[str, list[str]] = {
@@ -268,8 +270,8 @@ def fetch_episode_context(program_name: str, episode_num: int,
                           category: str = 'drama', show_notes: str = '',
                           aired_at: datetime | None = None) -> EpisodeContext:
     """
-    방영 후 콘텐츠(후기·반응·시청률)만 수집해 다음 회차 예측에 활용.
-    aired_at: 방영 시각 (KST datetime). 이 시각 이후 발행된 콘텐츠만 수집.
+    방영 후 콘텐츠(후기·반응·시청률)를 수집해 다음 회차 예측에 활용.
+    aired_at: 방영 시각 (KST datetime). 이 시각 기준 최근(~lookback) 발행 콘텐츠 수집.
     show_notes: DB shows.notes — AI에 전달되는 프로그램 형식 설명.
     """
     ctx = EpisodeContext()
@@ -279,11 +281,13 @@ def fetch_episode_context(program_name: str, episode_num: int,
 
     excl = SHOW_EXCLUDE_TERMS.get(program_name, [])
     # aired_at을 UTC로 변환 (feedparser는 UTC 기준)
+    # lookback 버퍼: aired_at이 부정확(어드민은 생성 시각으로 저장)해도
+    # 방영 직후 발행된 기사를 놓치지 않도록 일정 기간 이전 글까지 허용.
     after_dt: datetime | None = None
     if aired_at:
         if aired_at.tzinfo is None:
             aired_at = aired_at.replace(tzinfo=KST)
-        after_dt = aired_at.astimezone(timezone.utc)
+        after_dt = (aired_at - timedelta(hours=CONTEXT_LOOKBACK_HOURS)).astimezone(timezone.utc)
 
     ep = str(episode_num)
 
