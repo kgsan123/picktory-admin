@@ -101,8 +101,37 @@ def _odds_spread(options: list[dict]) -> float:
     return max(odds) - min(odds)
 
 
-def _apply_filters(predictions: list[dict]) -> list[dict]:
-    """품질 필터 적용. 통과한 예측만 반환."""
+# grounding 면제 선택지 (실제 이름이 아닌 정당한 예외 선택지)
+_EXEMPT_OPTS = {
+    '없음', '선택지에 없음', '아무도 없음', '아무도 선택 안 함', '무승부',
+    '전원 생존', '탈락 없음', '벌칙 없음', '그 외 아티스트', '그 외', '기권', '제3의 팀이 가져감',
+}
+
+def _build_allowed_names(cast_names: list[str]) -> set[str]:
+    """cast_names에서 'N기 ' 접두 제거한 순수 이름 집합."""
+    names = set()
+    for c in cast_names or []:
+        pure = re.sub(r'^\d+기\s*', '', c).strip()
+        if len(pure) >= 2:
+            names.add(pure)
+    return names
+
+
+def _is_grounded(opt_text: str, allowed: set[str]) -> bool:
+    """선택지 텍스트가 허용 이름 중 하나를 포함하면 grounded."""
+    t = opt_text.strip()
+    if t in _EXEMPT_OPTS:
+        return True
+    return any(name in t for name in allowed)
+
+
+def _apply_filters(predictions: list[dict], allowed_names: set[str] | None = None) -> list[dict]:
+    """품질 필터 적용. 통과한 예측만 반환.
+
+    allowed_names: 신뢰 가능한 출연자 이름 집합(3개 이상일 때만 grounding 적용).
+    비예외 선택지의 절반 초과가 이 이름들과 매칭 안 되면 환각으로 보고 제거.
+    """
+    grounding_on = bool(allowed_names) and len(allowed_names) >= 3
     kept = []
     for p in predictions:
         fun = p.get('fun_score', 0)
@@ -153,6 +182,15 @@ def _apply_filters(predictions: list[dict]) -> list[dict]:
         if generic_hits:
             log.debug(f"필터 제거 (일반명사 선택지 {generic_hits}): {p.get('title')}")
             continue
+
+        # 환각 grounding 검사 — 신뢰 이름 집합이 있을 때만
+        if grounding_on:
+            non_exempt = [t for t in opt_texts if t not in _EXEMPT_OPTS]
+            if non_exempt:
+                ungrounded = [t for t in non_exempt if not _is_grounded(t, allowed_names)]
+                if len(ungrounded) > len(non_exempt) / 2:
+                    log.debug(f"필터 제거 (환각 선택지 {ungrounded}): {p.get('title')}")
+                    continue
 
         # 균등 배당 거부 — 유력/이변 구도가 없으면 고르는 재미 없음
         if _odds_spread(options) < 0.12:
@@ -219,6 +257,7 @@ def generate_predictions(
     category = episode.get('category', 'drama')
     next_ep = (episode.get('episode_number') or 1) + 1
     system_prompt, user_template = _load_prompt(category)
+    allowed_names = _build_allowed_names(context.get('cast_names', []))
 
     # {chart_context}는 music 프롬프트에만 있으므로 없는 필드는 빈 문자열로 처리
     from collections import defaultdict
@@ -266,7 +305,7 @@ def generate_predictions(
                 continue
 
             predictions = [_clean_prediction(p) for p in predictions]
-            filtered = _dedupe(_apply_filters(predictions))[:6]  # 필터 → 중복제거 → 최대 6개
+            filtered = _dedupe(_apply_filters(predictions, allowed_names))[:6]  # 필터 → 중복제거 → 최대 6개
             if len(filtered) >= 4:  # 4개 이상이면 통과 (필터로 일부 탈락 감안)
                 for p in filtered:
                     p['prompt_version'] = PROMPT_VERSION
@@ -315,6 +354,7 @@ def generate_episode_predictions(episode_id: str, extra_context: dict | None = N
     context_sufficient = True  # 운영자 입력이 있으면 무조건 통과
     chart_text = ''
     auto_trailer = ''
+    cast_names: list[str] = []
     if operator_summary:
         auto_text = operator_summary
     else:
@@ -336,6 +376,7 @@ def generate_episode_predictions(episode_id: str, extra_context: dict | None = N
                 show_notes=show_notes, aired_at=aired_at_dt,
             )
             context_sufficient = ep_ctx.has_sufficient_signal()
+            cast_names = ep_ctx.cast_names
             auto_text = ep_ctx.to_prompt_text() or ep.get('news_summary') or ''
             chart_text = ep_ctx.to_chart_text()
             # 자동 수집 예고를 operator 미입력시 fallback으로 사용
@@ -375,6 +416,7 @@ def generate_episode_predictions(episode_id: str, extra_context: dict | None = N
         'trailer_hints': trailer_hints,
         'news_summary': auto_text,
         'chart_context': chart_text,
+        'cast_names': cast_names,
     }
 
     predictions = generate_predictions(ep, context)
