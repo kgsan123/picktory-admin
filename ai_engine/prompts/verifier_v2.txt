@@ -9,6 +9,13 @@
 
 판정 규칙:
 - 각 예측에는 선택지(options) 목록이 있습니다. 실제 데이터로 확인되는 선택지의 id를 correct_option_id로 반환.
+- **매칭이 핵심**: 실제 결과를 각 선택지의 text와 하나씩 대조하세요. 실제 결과가 나열된
+  선택지 중 하나와 일치하면 **반드시 그 선택지의 id**를 고르세요.
+  - 예: 실제 "aespa Whiplash 1위" + 선택지 A="aespa - Whiplash" → 정답은 A (그 외 아님!)
+  - 아티스트명만 같으면 곡명이 약간 달라도 같은 선택지로 인정.
+- **"그 외 아티스트 / 선택지에 없음 / 아무도 없음" 같은 catch-all 선택지는
+  실제 결과가 나열된 어느 선택지와도 일치하지 않을 때만** 고르세요. 나열된 선택지에
+  있는데도 catch-all을 고르는 것은 명백한 오답입니다.
 - 데이터로 명확히 확인 가능: confidence 0.70 이상
 - 데이터 부족·모호: correct_option_id = null, confidence < 0.70 (이 경우 pending 처리됨)
 - 절대 추측하지 마세요. 데이터에 근거가 없으면 null.
@@ -28,10 +35,16 @@
   ]
 }
 
-예시:
-입력 예측: {"prediction_id":"x1","content":"이번 회차 요리 대결 1위는?","options":[{"id":"A","text":"최현석"},{"id":"B","text":"샘 킴"},{"id":"C","text":"무승부"}]}
-데이터에 "최현석이 우승했다"가 있으면:
-{"results":[{"prediction_id":"x1","correct_option_id":"A","confidence":0.9,"evidence":"줄거리에 최현석 우승 명시"}]}
+예시 1 (나열된 선택지와 일치 → 그 선택지):
+입력: {"prediction_id":"x1","content":"이번 회차 1위는?","options":[{"id":"A","text":"aespa - Whiplash"},{"id":"B","text":"illit"},{"id":"C","text":"그 외 아티스트"}]}
+데이터: "aespa Whiplash가 1위"
+정답: {"results":[{"prediction_id":"x1","correct_option_id":"A","confidence":0.9,"evidence":"줄거리에 aespa Whiplash 1위 명시 → 선택지 A와 일치"}]}
+(주의: A가 일치하므로 C '그 외'는 오답)
+
+예시 2 (나열된 선택지에 없음 → catch-all):
+입력: {"prediction_id":"x2","content":"이번 회차 1위는?","options":[{"id":"A","text":"aespa"},{"id":"B","text":"illit"},{"id":"C","text":"그 외 아티스트"}]}
+데이터: "데이식스가 1위"
+정답: {"results":[{"prediction_id":"x2","correct_option_id":"C","confidence":0.9,"evidence":"데이식스는 A·B에 없음 → 그 외"}]}
 
 [USER]
 프로그램: {program_name}
