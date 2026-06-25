@@ -19,6 +19,32 @@ KST = ZoneInfo('Asia/Seoul')
 
 MIN_CLIP_COUNT = 3
 
+# 예측 게임 대상이 아닌 콘텐츠 (뉴스/스포츠중계/다큐/오추출 잔여물)
+_NOISE_TERMS = [
+    # 뉴스·시사
+    '뉴스', '속보', '단독', '자막', '돌직구', '이슈를 켜라', '브리핑', '아침마당', '시사',
+    # 스포츠 중계
+    'KBO', 'MLB', 'NBA', 'UFC', 'ATP', 'WTA', 'PGA', 'LPGA', '퓨처스', '챔피언십', '올림픽',
+    # 다큐·정보
+    '세계테마기행', '세계사', '다큐', '기행',
+    # 클립/오추출 잔여물
+    'amp', 'CREAT', 'actII', '하이라이트', '메이킹',
+]
+
+
+def _is_noise_name(name: str) -> bool:
+    """예측 게임 대상이 아닌 후보(뉴스/스포츠/다큐/오추출)인지."""
+    low = name.lower()
+    for term in _NOISE_TERMS:
+        t = term.lower()
+        # 영문 약어는 토큰 경계로, 한글은 부분일치로 검사
+        if term.isascii():
+            if re.search(rf'(?<![a-z]){re.escape(t)}(?![a-z])', low):
+                return True
+        elif term in name:
+            return True
+    return False
+
 
 def _get_episode_num(program_name: str) -> int:
     """Naver News에서 최신 회차 번호 탐색."""
@@ -61,6 +87,9 @@ def _merge_signals(yt: list, ott: list, db) -> list[dict]:
     for show in yt + ott:
         name = show['name']
         if name in existing_names or name in rejected_names:
+            continue
+        if _is_noise_name(name):
+            log.info(f'노이즈 제외: {name}')
             continue
         if name not in merged:
             merged[name] = show.copy()
