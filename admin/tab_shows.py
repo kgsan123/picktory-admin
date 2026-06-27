@@ -138,13 +138,38 @@ def _show_card(db, s: dict):
                 ),
                 height=70,
             )
-            new_cast = st.text_area(
-                '출연자 명단 (예측 선택지로 사용 · 쉼표/줄바꿈 구분)',
-                value=s.get('cast_names') or '',
-                key=f'cast_{sid}',
-                placeholder='예) 영수, 영자, 순자, 광수, 상철\n뉴스에 이름이 안 나오는 넷플릭스·서바이벌 프로그램은 여기에 직접 입력',
-                height=60,
-            )
+            cast_key = f'cast_{sid}'
+            if st.button('🔎 출연자 자동 추천', key=f'castsg_{sid}',
+                         help='나무위키·뉴스에서 출연자 후보를 모아 채워줍니다. 확인·수정 후 [설정 저장]'):
+                with st.spinner('출연자 수집 중... (5~15초)'):
+                    try:
+                        from data_collector.cast_suggest import suggest_cast
+                        names = suggest_cast(s['name'], cat)
+                        if names:
+                            st.session_state[cast_key] = ', '.join(names)
+                            st.toast(f'{len(names)}명 추천 — 확인·수정 후 [설정 저장]')
+                        else:
+                            st.toast('자동 수집 실패(자료 부족) — 직접 입력하세요')
+                    except Exception as e:
+                        from ai_engine.prediction_generator import classify_generation_error
+                        st.toast(f'자동 추천 실패: {classify_generation_error(e)}')
+                st.rerun()
+            # 자동 추천이 채운 값(session_state)이 있으면 그것을, 없으면 DB 값을 표시
+            if cast_key in st.session_state:
+                new_cast = st.text_area(
+                    '출연자 명단 (예측 선택지로 사용 · 쉼표/줄바꿈 구분)',
+                    key=cast_key,
+                    help='자동 추천은 후보일 뿐 — 반드시 확인·수정 후 저장 (저장한 명단만 예측에 사용)',
+                    height=60,
+                )
+            else:
+                new_cast = st.text_area(
+                    '출연자 명단 (예측 선택지로 사용 · 쉼표/줄바꿈 구분)',
+                    value=s.get('cast_names') or '',
+                    key=cast_key,
+                    placeholder='예) 영수, 영자, 순자, 광수, 상철\n넷플릭스·서바이벌처럼 뉴스에 이름 없는 프로그램은 위 [자동 추천] 또는 직접 입력',
+                    height=60,
+                )
             sc1, sc2 = st.columns(2)
             if sc1.button('설정 저장', key=f'save_{sid}', use_container_width=True):
                 db.table('shows').update({
@@ -155,6 +180,7 @@ def _show_card(db, s: dict):
                     'notes': new_notes,
                     'cast_names': new_cast.strip(),
                 }).eq('id', sid).execute()
+                st.session_state.pop(cast_key, None)  # 저장 후 DB 값 반영
                 st.toast('저장됨')
                 st.rerun()
             if sc2.button('종영 처리', key=f'end_{sid}', use_container_width=True):
