@@ -37,17 +37,23 @@ def _load_prompt(category: str) -> tuple[str, str]:
     return system, user_template
 
 
-_CJK_RE = re.compile(r'[一-鿿㐀-䶿　-〿＀-￯]')
+# 허용 문자만 유지: 한글·자모·영문·숫자·공백·기본 문장부호.
+# 한자·키릴(러시아어)·일본어 가나 등 그 외 문자는 모두 제거.
+_DISALLOWED_RE = re.compile(r"[^가-힣ㄱ-ㆎa-zA-Z0-9\s.,·:!?()\[\]%'\"\-/]")
+
+def _clean_text(s: str) -> str:
+    return re.sub(r'\s+', ' ', _DISALLOWED_RE.sub('', s)).strip()
+
 
 def _clean_prediction(p: dict) -> dict:
-    """생성된 예측에서 한자·일본어 제거 + 확률(odds) 제거 (확률은 쓰지 않음)."""
+    """예측 텍스트 정제: 한글·영문·숫자 외 문자(한자·키릴·가나 등) 제거 + 확률(odds) 제거."""
     for field in ('title', 'content', 'verification_method'):
-        if field in p:
-            p[field] = _CJK_RE.sub('', p[field]).strip()
+        if field in p and isinstance(p[field], str):
+            p[field] = _clean_text(p[field])
     if 'options' in p:
         for opt in p['options']:
-            if 'text' in opt:
-                opt['text'] = _CJK_RE.sub('', opt['text']).strip()
+            if 'text' in opt and isinstance(opt['text'], str):
+                opt['text'] = _clean_text(opt['text'])
             opt.pop('odds', None)  # 확률 미사용 — 모델이 내보내도 제거
     return p
 
@@ -335,10 +341,18 @@ def classify_generation_error(text: str) -> str:
     if 'json' in t or '파싱' in raw:
         return 'AI 응답 형식 오류(JSON 파싱 실패) — 다시 시도하세요'
     if '필터 후' in raw or '최소 4개' in raw:
-        return '생성된 예측이 품질 기준(선택지·검증·차등배당)을 통과 못함 — 컨텍스트 보강 후 재시도'
+        return '생성된 예측이 품질 기준(선택지·검증)을 통과 못함 — 출연자 명단/컨텍스트 보강 후 재시도'
     if 'timeout' in t or 'connection' in t:
         return 'AI 서버 응답 지연/연결 실패 — 다시 시도하세요'
     return f'생성 오류: {raw[:160]}'
+
+
+def _parse_cast(raw) -> list[str]:
+    """운영자 입력 출연자 명단(쉼표/줄바꿈/· 구분) → 이름 리스트."""
+    if not raw:
+        return []
+    parts = re.split(r'[,\n·/、]+', str(raw))
+    return [p.strip() for p in parts if p.strip()]
 
 
 def generate_episode_predictions(episode_id: str, extra_context: dict | None = None) -> list[dict]:
@@ -358,23 +372,34 @@ def generate_episode_predictions(episode_id: str, extra_context: dict | None = N
     ep_num = ep.get('episode_number') or 1
     program_name = ep.get('program_name', '')
 
-    # shows 테이블에서 프로그램 형식 설명(notes) 조회
+    # shows 테이블에서 프로그램 형식 설명(notes) + 출연자 명단(cast_names) 조회
     show_notes = ''
+    operator_cast: list[str] = []
     try:
-        show_row = client.table('shows').select('notes').eq('name', program_name).maybe_single().execute()
+        show_row = client.table('shows').select('notes,cast_names').eq('name', program_name).maybe_single().execute()
         if show_row and show_row.data:
             show_notes = (show_row.data.get('notes') or '').strip()
+            operator_cast = _parse_cast(show_row.data.get('cast_names'))
     except Exception:
-        pass
+        # cast_names 컬럼 미적용(009 전) 등 → notes만이라도 재시도
+        try:
+            show_row = client.table('shows').select('notes').eq('name', program_name).maybe_single().execute()
+            if show_row and show_row.data:
+                show_notes = (show_row.data.get('notes') or '').strip()
+        except Exception:
+            pass
 
     # 우선순위: 관리자 입력 > 자동 수집(Google News + 더쿠 + DC) > DB 기존 데이터
     operator_summary = (extra_context or {}).get('episode_summary', '').strip()
     context_sufficient = True  # 운영자 입력이 있으면 무조건 통과
     chart_text = ''
     auto_trailer = ''
-    cast_names: list[str] = []
+    cast_names: list[str] = list(operator_cast)
     if operator_summary:
         auto_text = operator_summary
+        # 운영자 출연자 명단이 있으면 프롬프트 등장인물로 명시
+        if operator_cast:
+            auto_text = f"[이번 회차 등장인물] {', '.join(operator_cast)}\n" + auto_text
     else:
         try:
             from data_collector.context_fetcher import fetch_episode_context
@@ -392,6 +417,7 @@ def generate_episode_predictions(episode_id: str, extra_context: dict | None = N
             ep_ctx = fetch_episode_context(
                 program_name, ep_num, category=category,
                 show_notes=show_notes, aired_at=aired_at_dt,
+                cast_seed=operator_cast,
             )
             context_sufficient = ep_ctx.has_sufficient_signal()
             cast_names = ep_ctx.cast_names
@@ -410,7 +436,10 @@ def generate_episode_predictions(episode_id: str, extra_context: dict | None = N
             auto_text = ep.get('news_summary') or ''
             chart_text = ''
             auto_trailer = ''
-            context_sufficient = bool(auto_text)  # DB 기존 데이터라도 있으면 시도
+            # DB 기존 데이터 또는 운영자 출연자 명단이 있으면 시도
+            context_sufficient = bool(auto_text) or len(operator_cast) >= 2
+            if operator_cast and '[이번 회차 등장인물]' not in auto_text:
+                auto_text = f"[이번 회차 등장인물] {', '.join(operator_cast)}\n" + auto_text
 
     # ── rank8: 빈약 컨텍스트 게이트 ──────────────────────────────
     # 운영자 입력도 없고 자동 수집 신호도 부족하면 → 환각만 나올 생성을 건너뜀

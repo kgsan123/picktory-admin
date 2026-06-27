@@ -144,6 +144,8 @@ class EpisodeContext:
         """예측 생성에 충분한 신호가 있는지 — 환각 방지 게이트용."""
         if self.episode_summary:
             return True
+        if len(self.cast_names) >= 2:  # 출연자 명단(운영자 입력 등) 있으면 생성 가능
+            return True
         return (len(self.news_snippets) + len(self.community_posts)) >= 2
 
 
@@ -277,16 +279,19 @@ def _dcinside(query: str, ctx: EpisodeContext) -> None:
 
 def fetch_episode_context(program_name: str, episode_num: int,
                           category: str = 'drama', show_notes: str = '',
-                          aired_at: datetime | None = None) -> EpisodeContext:
+                          aired_at: datetime | None = None,
+                          cast_seed: list[str] | None = None) -> EpisodeContext:
     """
     방영 후 콘텐츠(후기·반응·시청률)를 수집해 다음 회차 예측에 활용.
     aired_at: 방영 시각 (KST datetime). 이 시각 기준 최근(~lookback) 발행 콘텐츠 수집.
     show_notes: DB shows.notes — AI에 전달되는 프로그램 형식 설명.
+    cast_seed: 운영자가 입력한 출연자 명단 (자동 추출보다 우선, 항상 포함).
     """
     ctx = EpisodeContext()
     ctx.ep_num = episode_num
     if show_notes:
         ctx.show_notes = show_notes
+    seed = [n.strip() for n in (cast_seed or []) if n and n.strip()]
 
     excl = SHOW_EXCLUDE_TERMS.get(program_name, [])
     # aired_at을 UTC로 변환 (feedparser는 UTC 기준)
@@ -354,7 +359,14 @@ def fetch_episode_context(program_name: str, episode_num: int,
     all_text = ctx.news_snippets + ctx.community_posts
     if ctx.episode_summary:
         all_text = all_text + [ctx.episode_summary]
-    ctx.cast_names = _extract_names(all_text)
+    extracted = _extract_names(all_text)
+    # 운영자 입력 명단을 앞에 두고 자동 추출분 병합 (중복 제거)
+    merged, seen = [], set()
+    for n in seed + extracted:
+        if n not in seen:
+            seen.add(n)
+            merged.append(n)
+    ctx.cast_names = merged
 
     return ctx
 

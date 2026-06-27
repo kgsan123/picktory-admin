@@ -138,6 +138,13 @@ def _show_card(db, s: dict):
                 ),
                 height=70,
             )
+            new_cast = st.text_area(
+                '출연자 명단 (예측 선택지로 사용 · 쉼표/줄바꿈 구분)',
+                value=s.get('cast_names') or '',
+                key=f'cast_{sid}',
+                placeholder='예) 영수, 영자, 순자, 광수, 상철\n뉴스에 이름이 안 나오는 넷플릭스·서바이벌 프로그램은 여기에 직접 입력',
+                height=60,
+            )
             sc1, sc2 = st.columns(2)
             if sc1.button('설정 저장', key=f'save_{sid}', use_container_width=True):
                 db.table('shows').update({
@@ -146,6 +153,7 @@ def _show_card(db, s: dict):
                     'air_time_kst': new_time,
                     'category': new_cat,
                     'notes': new_notes,
+                    'cast_names': new_cast.strip(),
                 }).eq('id', sid).execute()
                 st.toast('저장됨')
                 st.rerun()
