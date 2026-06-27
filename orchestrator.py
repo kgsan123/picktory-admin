@@ -245,12 +245,15 @@ def resolve_pending_sweep():
             continue  # 아직 방영 직후 → 데이터 미축적, 다음 sweep에서
 
         if aired < now - timedelta(days=EXPIRE_DAYS):
-            # 기한 초과 → 만료 처리 (무한 재시도 방지)
-            client.table('predictions').update({'status': 'expired'}) \
+            # 기한 초과 → 만료 처리 (무한 재시도 방지).
+            # 단, 'finale'(최종화 마감) 예측은 시즌 끝까지 살려둠 — 만료 제외.
+            res = client.table('predictions').update({'status': 'expired'}) \
                 .eq('program_name', program).eq('target_episode_number', target_ep) \
-                .eq('verdict', 'pending').eq('status', 'published').execute()
-            expired_eps += 1
-            send_discord(f'⏰ {program} {target_ep}회: {EXPIRE_DAYS}일 내 판정 실패로 만료 처리 — 필요시 수동 판정')
+                .eq('verdict', 'pending').eq('status', 'published') \
+                .neq('resolution_horizon', 'finale').execute()
+            if res.data:
+                expired_eps += 1
+                send_discord(f'⏰ {program} {target_ep}회: {EXPIRE_DAYS}일 내 판정 실패로 만료 처리 — 필요시 수동 판정')
             continue
 
         results = verify_episode(ep_rows[0]['id'])

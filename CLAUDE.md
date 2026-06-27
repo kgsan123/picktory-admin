@@ -107,6 +107,7 @@ CREATE TABLE IF NOT EXISTS predictions (
     difficulty INT,     -- 1 (easy) to 5 (hard)
     fun_score INT,      -- 1-5, AI self-rating on engagement potential
     verification_method TEXT,  -- how to confirm answer after airing
+    resolution_horizon VARCHAR DEFAULT 'next',  -- next(다음 회차 마감) | finale(최종화 마감)
     verdict VARCHAR DEFAULT 'pending',  -- pending | resolved (정답 선택지 확정 여부)
     correct_option_id VARCHAR,  -- 실제 일어난 선택지 id (AI/운영자 판정)
     confidence FLOAT,   -- 0.0-1.0, AI confidence in verdict

@@ -427,6 +427,9 @@ def generate_episode_predictions(episode_id: str, extra_context: dict | None = N
 
     rows = []
     for p in predictions:
+        closing = p.get('closing', 'next')
+        if closing not in ('next', 'finale'):
+            closing = 'next'
         rows.append({
             'episode_id': episode_id,
             'program_name': program_name,
@@ -438,6 +441,7 @@ def generate_episode_predictions(episode_id: str, extra_context: dict | None = N
             'difficulty': p.get('difficulty', 3),
             'fun_score': p.get('fun_score', 3),
             'verification_method': p.get('verification_method', ''),
+            'resolution_horizon': closing,
             'prompt_version': p.get('prompt_version', PROMPT_VERSION),
             'status': 'draft',
             'verdict': 'pending',
@@ -454,8 +458,8 @@ def generate_episode_predictions(episode_id: str, extra_context: dict | None = N
     return rows
 
 
-# 마이그레이션 006 적용 전이면 없을 수 있는 컬럼
-_OPTIONAL_COLS = ['program_name', 'target_episode_number']
+# 마이그레이션 미적용 시 없을 수 있는 컬럼 (006/008)
+_OPTIONAL_COLS = ['program_name', 'target_episode_number', 'resolution_horizon']
 
 def _insert_predictions(client, rows: list[dict]) -> None:
     """예측 insert — 신규 컬럼이 DB에 없으면(마이그레이션 미적용) 제거 후 재시도."""
@@ -463,7 +467,7 @@ def _insert_predictions(client, rows: list[dict]) -> None:
         client.table('predictions').insert(rows).execute()
     except Exception as e:
         if any(col in str(e) for col in _OPTIONAL_COLS):
-            log.warning('신규 컬럼 미적용(마이그레이션 006 필요) — 해당 컬럼 제외하고 저장')
+            log.warning('신규 컬럼 미적용(마이그레이션 006/008 필요) — 해당 컬럼 제외하고 저장')
             stripped = [{k: v for k, v in r.items() if k not in _OPTIONAL_COLS} for r in rows]
             client.table('predictions').insert(stripped).execute()
         else:

@@ -1,5 +1,10 @@
 # DECISIONS.md
 
+## 2026-06-25 예측별 클로징(결과 확인 시점) 도입
+**Decision:** 예측마다 `resolution_horizon`('next'|'finale')을 생성 시 AI가 분류. 'next'=다음 회차에 결과 확인(대부분), 'finale'=시즌 마지막에만 확인(우승자·최종순위 등). 5개 v5 프롬프트에 "closing" 필드 추가, 생성기가 검증·저장(기본 next), 마이그레이션 008.
+**Reason:** 다음 회차에 바로 판별되는 예측과 시즌 끝에야 알 수 있는 예측을 구분해야 게임 마감 시점을 정하고, 검증 sweep이 후자를 잘못 만료시키지 않음.
+**Impact:** answer_verifier.verify_episode는 finale 예측을 다음-회차 판정에서 제외(.neq), sweep은 finale을 7일 만료에서 제외. 어드민에 마감 시점 표시. finale 예측은 시즌 종료 시 운영자 수동 판정(자동 finale 감지는 후속). 'next'의 실제 마감 시각 = target 회차 방영 시각(쇼 스케줄). 마이그레이션 008 수동 적용 필요.
+
 ## 2026-06-25 확률(odds) 전면 제거
 **Decision:** 예측 선택지에서 확률/퍼센트(odds)를 더 이상 생성·저장·표시하지 않음. 선택지는 {id, text}만. 생성 프롬프트(5종 v5)에서 차등/균등 배당 가이드와 % 예시 제거, `_clean_prediction`이 odds 키 제거, 필터에서 `_odds_spread`·diff==1 max_odds 검사 삭제. 검증기는 '유력 후보(최고 배당) 적중' 개념을 버리고 정답 선택지 확정 시 verdict='resolved'(아니면 pending). 어드민은 % 미표시 + 정답 선택지 직접 지정 UI.
 **Reason:** 운영자 판단상 확률은 제품에 중요하지 않음. 모델이 차등 배당을 억지로 만들며 품질·신뢰성 저하. 게임의 핵심은 '실제 일어난 선택지(correct_option_id)'.

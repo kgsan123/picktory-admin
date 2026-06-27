@@ -247,11 +247,13 @@ def verify_episode(episode_id: str) -> list[dict]:
     n = ep.get('episode_number')
 
     # 이 회차(N)를 대상으로 한 pending 예측 조회 (직전 run에서 생성됨)
+    # 'finale'(최종화 마감) 예측은 다음 회차에 판정하지 않음 — 시즌 끝에 별도 처리/수동 판정
     preds = (client.table('predictions')
              .select('*')
              .eq('program_name', program)
              .eq('target_episode_number', n)
              .eq('verdict', 'pending')
+             .neq('resolution_horizon', 'finale')
              .execute().data) or []
 
     if not preds:

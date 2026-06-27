@@ -4,6 +4,7 @@ import streamlit as st
 VERDICT_KR = {'pending': '⏳ 미판정', 'resolved': '✅ 판정완료',
               'correct': '✅ 정답', 'incorrect': '❌ 오답'}
 STATUS_KR = {'draft': '검토 대기', 'published': '게시됨', 'expired': '거부됨'}
+CLOSING_KR = {'next': '다음 회차', 'finale': '최종화'}
 # 필터 라벨 → status 값
 _FILTERS = {'검토 대기': 'draft', '게시됨': 'published', '거부됨': 'expired', '전체': '전체'}
 
@@ -83,7 +84,8 @@ def render(db):
                     mark = ' ✅ **(정답)**' if coid and o.get('id') == coid else ''
                     st.write(f"  {o.get('id')}. {o.get('text')}{mark}")
 
-            st.caption(f"확인 방법: {pred.get('verification_method') or '-'}  ·  "
+            closing = CLOSING_KR.get(pred.get('resolution_horizon') or 'next', '다음 회차')
+            st.caption(f"🔚 마감: {closing}  ·  확인 방법: {pred.get('verification_method') or '-'}  ·  "
                        f"난이도: {'⭐' * int(pred.get('difficulty') or 0)}")
             if pred.get('evidence_text'):
                 st.caption(f"🤖 판정 근거: {pred.get('evidence_text')}")
