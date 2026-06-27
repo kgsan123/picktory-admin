@@ -61,7 +61,26 @@ def _parse_predictions(text: str) -> list[dict] | None:
         data = json.loads(text)
         return data.get('predictions', [])
     except json.JSONDecodeError:
-        return None
+        pass
+    # 잘림·일부 깨짐 복구: 파싱 가능한 예측 객체만 누적 추출
+    salvaged = _salvage_predictions(text)
+    return salvaged or None
+
+
+def _salvage_predictions(text: str) -> list[dict]:
+    """깨진/잘린 응답에서 완성된 예측 객체(content+options 보유)만 raw_decode로 추출."""
+    decoder = json.JSONDecoder()
+    out = []
+    i = text.find('{', text.find('"predictions"') if '"predictions"' in text else 0)
+    while i >= 0:
+        try:
+            obj, end = decoder.raw_decode(text, i)
+            if isinstance(obj, dict) and 'content' in obj and 'options' in obj:
+                out.append(obj)
+            i = text.find('{', end)
+        except json.JSONDecodeError:
+            i = text.find('{', i + 1)  # 이 위치는 깨짐 → 다음 후보로
+    return out
 
 
 _VAGUE_VERIFY = ['방영 후 확인', '해당 회차에서 확인', '추후 확인', '나중에 확인']
