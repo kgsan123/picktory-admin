@@ -73,22 +73,15 @@ def _salvage_results(text: str) -> list[dict]:
     return results
 
 
-def _favorite_option_id(options: list[dict]) -> str | None:
-    """최고 배당(AI 유력 후보) 선택지의 id."""
-    valid = [o for o in options if isinstance(o.get('odds'), (int, float))]
-    if not valid:
-        return None
-    return max(valid, key=lambda o: o.get('odds', 0)).get('id')
-
-
 def _reconcile(predictions: list[dict], results: list[dict]) -> list[dict]:
     """
     AI 응답을 입력 예측과 대조해 완전한 판정 리스트 재구성.
     - 누락된 예측 → pending (AI 미응답)
     - 환각 prediction_id → drop + 경고
     - correct_option_id 유효성 검증 (실제 options id 집합에 있어야 함)
-    - confidence < 임계값 → pending
-    - verdict = 유력 후보(최고 배당)가 correct_option_id와 일치하면 correct, 아니면 incorrect
+    - confidence < 임계값 또는 미확정 → pending
+    - 실제 일어난 선택지(correct_option_id)가 확정되면 → resolved
+      (확률을 쓰지 않으므로 '유력 후보 적중' 개념 없음. 정답 선택지만 기록)
     """
     by_id = {r.get('prediction_id'): r for r in results}
     input_ids = {p['id'] for p in predictions}
@@ -125,11 +118,9 @@ def _reconcile(predictions: list[dict], results: list[dict]) -> list[dict]:
             })
             continue
 
-        # 유력 후보(최고 배당)가 실제로 맞았는지로 verdict 결정
-        favorite = _favorite_option_id(options)
-        verdict = 'correct' if coid == favorite else 'incorrect'
+        # 정답 선택지 확정 → resolved (확률 미사용이라 correct/incorrect 구분 없음)
         reconciled.append({
-            'prediction_id': pid, 'verdict': verdict,
+            'prediction_id': pid, 'verdict': 'resolved',
             'correct_option_id': coid, 'confidence': conf, 'evidence': evidence,
         })
 

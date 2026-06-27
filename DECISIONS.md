@@ -1,5 +1,10 @@
 # DECISIONS.md
 
+## 2026-06-25 확률(odds) 전면 제거
+**Decision:** 예측 선택지에서 확률/퍼센트(odds)를 더 이상 생성·저장·표시하지 않음. 선택지는 {id, text}만. 생성 프롬프트(5종 v5)에서 차등/균등 배당 가이드와 % 예시 제거, `_clean_prediction`이 odds 키 제거, 필터에서 `_odds_spread`·diff==1 max_odds 검사 삭제. 검증기는 '유력 후보(최고 배당) 적중' 개념을 버리고 정답 선택지 확정 시 verdict='resolved'(아니면 pending). 어드민은 % 미표시 + 정답 선택지 직접 지정 UI.
+**Reason:** 운영자 판단상 확률은 제품에 중요하지 않음. 모델이 차등 배당을 억지로 만들며 품질·신뢰성 저하. 게임의 핵심은 '실제 일어난 선택지(correct_option_id)'.
+**Impact:** options 스키마 [{id,text,odds}]→[{id,text}]. verdict 값 correct/incorrect→resolved/pending (기존 행은 admin 라벨에 유지). 사용자 앱(별도 repo)이 verdict='resolved'/correct_option_id를 읽도록 갱신 필요.
+
 ## 2026-06-25 검증 자동 해소 (pending 재검증 sweep)
 **Decision:** orchestrator에 매일 11:00 KST `resolve_pending_sweep()` cron 추가. pending+published 예측을 (program, target_episode_number)로 그룹화해, 방영된 회차 레코드가 있고 aired_at이 SETTLE_HOURS(6h) 지난 회차에 대해 기존 `verify_episode`를 재호출. EXPIRE_DAYS(7일) 초과 미판정은 status='expired' + Discord 알림. 한 sweep당 MAX_PER_SWEEP(15)회차 상한(Groq 한도 보호). 어드민 [예측] 탭에 "지금 재검증" 수동 버튼 추가.
 **Reason:** 기존엔 verify가 방영 +1h에 한 번만 실행 → 결과 기사 미축적으로 대부분 pending인데 재시도가 없어 영영 미판정. 게임에 정답이 안 생김.

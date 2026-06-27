@@ -103,12 +103,12 @@ CREATE TABLE IF NOT EXISTS predictions (
     category VARCHAR,   -- survival | romance | drama | music | variety
     title TEXT,
     content TEXT,       -- the prediction question shown to users
-    options JSONB,      -- [{id, text, odds}]
+    options JSONB,      -- [{id, text}] (확률 미사용)
     difficulty INT,     -- 1 (easy) to 5 (hard)
     fun_score INT,      -- 1-5, AI self-rating on engagement potential
     verification_method TEXT,  -- how to confirm answer after airing
-    verdict VARCHAR DEFAULT 'pending',  -- pending | correct | incorrect (유력 후보가 맞았는지)
-    correct_option_id VARCHAR,  -- 실제 일어난 선택지 id (AI 판정)
+    verdict VARCHAR DEFAULT 'pending',  -- pending | resolved (정답 선택지 확정 여부)
+    correct_option_id VARCHAR,  -- 실제 일어난 선택지 id (AI/운영자 판정)
     confidence FLOAT,   -- 0.0-1.0, AI confidence in verdict
     evidence_text TEXT, -- AI reasoning for verdict
     prompt_version VARCHAR,
@@ -222,7 +222,7 @@ Output (JSON only):
       {
         "title": "string",
         "content": "question shown to users",
-        "options": [{"id": "A", "text": "...", "odds": 0.6}, ...],
+        "options": [{"id": "A", "text": "..."}, ...],
         "difficulty": 3,
         "fun_score": 4,
         "category": "survival",

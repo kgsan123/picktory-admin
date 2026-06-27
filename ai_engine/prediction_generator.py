@@ -40,7 +40,7 @@ def _load_prompt(category: str) -> tuple[str, str]:
 _CJK_RE = re.compile(r'[一-鿿㐀-䶿　-〿＀-￯]')
 
 def _clean_prediction(p: dict) -> dict:
-    """생성된 예측에서 한자·일본어 제거."""
+    """생성된 예측에서 한자·일본어 제거 + 확률(odds) 제거 (확률은 쓰지 않음)."""
     for field in ('title', 'content', 'verification_method'):
         if field in p:
             p[field] = _CJK_RE.sub('', p[field]).strip()
@@ -48,6 +48,7 @@ def _clean_prediction(p: dict) -> dict:
         for opt in p['options']:
             if 'text' in opt:
                 opt['text'] = _CJK_RE.sub('', opt['text']).strip()
+            opt.pop('odds', None)  # 확률 미사용 — 모델이 내보내도 제거
     return p
 
 
@@ -92,14 +93,6 @@ _GENERIC_OPTIONS = {
     '진입', '미진입', '성공', '실패', '달성', '미달성',
     '있음', '통과', '탈락',
 }
-
-def _odds_spread(options: list[dict]) -> float:
-    """선택지 배당의 최대-최소 차이. 너무 작으면 정보 없는(균등) 예측."""
-    odds = [o.get('odds', 0) for o in options if isinstance(o.get('odds'), (int, float))]
-    if len(odds) < 2:
-        return 1.0
-    return max(odds) - min(odds)
-
 
 # grounding 면제 선택지 (실제 이름이 아닌 정당한 예외 선택지)
 _EXEMPT_OPTS = {
@@ -191,17 +184,6 @@ def _apply_filters(predictions: list[dict], allowed_names: set[str] | None = Non
                 if len(ungrounded) > len(non_exempt) / 2:
                     log.debug(f"필터 제거 (환각 선택지 {ungrounded}): {p.get('title')}")
                     continue
-
-        # 균등 배당 거부 — 유력/이변 구도가 없으면 고르는 재미 없음
-        if _odds_spread(options) < 0.12:
-            log.debug(f"필터 제거 (배당 균등, 구도 없음): {p.get('title')}")
-            continue
-
-        if diff == 1:
-            max_odds = max(o.get('odds', 0) for o in options)
-            if max_odds > 0.85:
-                log.debug(f"필터 제거 (너무 뻔함): {p.get('title')}")
-                continue
 
         kept.append(p)
     return kept

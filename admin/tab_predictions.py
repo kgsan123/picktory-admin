@@ -1,7 +1,8 @@
 """Tab 2: 예측 검토 — draft → 게시 → 정답 입력"""
 import streamlit as st
 
-VERDICT_KR = {'pending': '⏳ 미판정', 'correct': '✅ 정답', 'incorrect': '❌ 오답'}
+VERDICT_KR = {'pending': '⏳ 미판정', 'resolved': '✅ 판정완료',
+              'correct': '✅ 정답', 'incorrect': '❌ 오답'}
 STATUS_OPTS = ['draft', 'published', 'expired']
 STATUS_KR = {'draft': '검토 대기', 'published': '게시됨', 'expired': '거부됨'}
 
@@ -59,9 +60,8 @@ def render(db):
             if opts:
                 st.write('**선택지:**')
                 for o in opts:
-                    pct = int(o.get('odds', 0) * 100)
                     mark = ' ✅ **(AI 판정 정답)**' if coid and o.get('id') == coid else ''
-                    st.write(f"  {o.get('id')}. {o.get('text')}  ({pct}%){mark}")
+                    st.write(f"  {o.get('id')}. {o.get('text')}{mark}")
 
             st.caption(f"확인 방법: {pred.get('verification_method') or '-'}  ·  "
                        f"난이도: {'⭐' * int(pred.get('difficulty') or 0)}")
@@ -80,8 +80,20 @@ def render(db):
                     st.rerun()
 
             if pred.get('status') == 'published' and pred.get('verdict') == 'pending':
-                v = b3.selectbox('정답 입력', ['pending', 'correct', 'incorrect'],
-                                  key=f'v_{pid}', label_visibility='collapsed')
+                # 정답 선택지를 직접 지정 (확률 미사용 → 실제 일어난 선택지만 기록)
+                ids = ['(미정)'] + [o.get('id') for o in opts]
+                def _fmt(x):
+                    if x == '(미정)':
+                        return '정답 선택'
+                    t = next((o.get('text') for o in opts if o.get('id') == x), '')
+                    return f'{x}. {t}'
+                sel = b3.selectbox('정답 선택지', ids, format_func=_fmt,
+                                    key=f'v_{pid}', label_visibility='collapsed')
                 if b4.button('저장', key=f'vs_{pid}'):
-                    db.table('predictions').update({'verdict': v}).eq('id', pid).execute()
-                    st.rerun()
+                    if sel == '(미정)':
+                        st.toast('정답 선택지를 고르세요')
+                    else:
+                        db.table('predictions').update(
+                            {'correct_option_id': sel, 'verdict': 'resolved'}
+                        ).eq('id', pid).execute()
+                        st.rerun()

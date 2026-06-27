@@ -86,13 +86,17 @@ TEST_EPISODES = [
 ]
 
 
+_OK_VERIFY = '발표 장면에서 결과를 직접 확인 (방영 직후 즉시 확인)'
+_OPTS3 = [{'id': 'A', 'text': '민수'}, {'id': 'B', 'text': '지훈'}, {'id': 'C', 'text': '없음'}]
+
+
 class TestFilters:
     def test_low_fun_score_removed(self):
         preds = [
             {'title': 'A', 'content': 'q', 'fun_score': 2, 'difficulty': 3,
-             'verification_method': '해당 회차 방영 후 장면 확인', 'options': [{'id':'A','odds':0.5},{'id':'B','odds':0.5}]},
+             'verification_method': _OK_VERIFY, 'options': _OPTS3},
             {'title': 'B', 'content': 'q', 'fun_score': 4, 'difficulty': 3,
-             'verification_method': '해당 회차 방영 후 장면 확인', 'options': [{'id':'A','odds':0.5},{'id':'B','odds':0.5}]},
+             'verification_method': _OK_VERIFY, 'options': _OPTS3},
         ]
         result = _apply_filters(preds)
         assert len(result) == 1
@@ -101,23 +105,23 @@ class TestFilters:
     def test_no_verification_method_removed(self):
         preds = [
             {'title': 'A', 'content': 'q', 'fun_score': 4, 'difficulty': 3,
-             'verification_method': '', 'options': [{'id':'A','odds':0.5},{'id':'B','odds':0.5}]},
+             'verification_method': '', 'options': _OPTS3},
         ]
         assert _apply_filters(preds) == []
 
-    def test_too_obvious_removed(self):
+    def test_too_few_options_removed(self):
+        # 선택지 2개 이하는 거부 (확률 무관, 다지선다 강제)
         preds = [
-            {'title': 'A', 'content': 'q', 'fun_score': 4, 'difficulty': 1,
-             'verification_method': '방영 후 확인 가능', 'options': [
-                 {'id':'A','odds':0.92},{'id':'B','odds':0.08}]},
+            {'title': 'A', 'content': 'q', 'fun_score': 4, 'difficulty': 3,
+             'verification_method': _OK_VERIFY,
+             'options': [{'id': 'A', 'text': '민수'}, {'id': 'B', 'text': '지훈'}]},
         ]
         assert _apply_filters(preds) == []
 
     def test_good_prediction_passes(self):
         preds = [
             {'title': 'A', 'content': 'q', 'fun_score': 4, 'difficulty': 3,
-             'verification_method': '해당 장면에서 확인 가능', 'options': [
-                 {'id':'A','odds':0.6},{'id':'B','odds':0.4}]},
+             'verification_method': _OK_VERIFY, 'options': _OPTS3},
         ]
         assert len(_apply_filters(preds)) == 1
 
