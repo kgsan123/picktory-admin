@@ -162,6 +162,9 @@ def _show_card(db, s: dict):
                     help='자동 추천은 후보일 뿐 — 반드시 확인·수정 후 저장 (저장한 명단만 예측에 사용)',
                     height=60,
                 )
+                # 저장 전이면 생성에 반영 안 됨 — 명확히 경고
+                if (st.session_state.get(cast_key) or '').strip() != (s.get('cast_names') or '').strip():
+                    st.warning('⚠️ 아직 저장 안 됨 — 아래 **[설정 저장]** 을 눌러야 예측에 반영됩니다.')
             else:
                 new_cast = st.text_area(
                     '출연자 명단 (예측 선택지로 사용 · 쉼표/줄바꿈 구분)',

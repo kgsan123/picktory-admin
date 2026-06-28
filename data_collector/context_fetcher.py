@@ -113,7 +113,9 @@ class EpisodeContext:
         # 이름 목록 — 있으면 사용, 없으면 "이름 없음" 명시
         if self.cast_names:
             parts.append(f'[이번 회차 등장인물] {", ".join(self.cast_names)}')
-            parts.append('※ 위 이름만 사용. 학습 데이터·다른 프로그램 이름 절대 금지.')
+            parts.append('※ 선택지 이름은 오직 위 [이번 회차 등장인물] 목록에서만. '
+                         '아래 뉴스·반응에 다른 이름(다른 기수·다른 인물 포함)이 나와도 '
+                         '목록에 없으면 절대 선택지로 쓰지 마세요. 학습 데이터 이름도 금지.')
         else:
             parts.append('[이번 회차 등장인물] 컨텍스트에서 이름 확인 불가')
             parts.append('※ 이름을 만들어 내지 마세요. 이름 없이 가능한 유형(선택 결과, 순위, 이벤트 발생 여부)으로만 예측 작성.')
@@ -355,18 +357,15 @@ def fetch_episode_context(program_name: str, episode_num: int,
     except Exception as e:
         ctx.errors.append(f'episode_summary 실패: {e}')
 
-    # 모든 텍스트에서 출연자 이름 추출 (AI가 이 이름만 사용하도록)
-    all_text = ctx.news_snippets + ctx.community_posts
-    if ctx.episode_summary:
-        all_text = all_text + [ctx.episode_summary]
-    extracted = _extract_names(all_text)
-    # 운영자 입력 명단을 앞에 두고 자동 추출분 병합 (중복 제거)
-    merged, seen = [], set()
-    for n in seed + extracted:
-        if n not in seen:
-            seen.add(n)
-            merged.append(n)
-    ctx.cast_names = merged
+    # 출연자 이름: 운영자 명단(seed)이 있으면 그것만 권위적으로 사용.
+    # 자동 추출은 seed가 없을 때만 (뉴스의 다른 기수·다른 인물 오염 방지).
+    if seed:
+        ctx.cast_names = seed
+    else:
+        all_text = ctx.news_snippets + ctx.community_posts
+        if ctx.episode_summary:
+            all_text = all_text + [ctx.episode_summary]
+        ctx.cast_names = _extract_names(all_text)
 
     return ctx
 
